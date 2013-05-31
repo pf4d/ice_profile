@@ -1,6 +1,27 @@
 #!/usr/bin/python
+from numpy import *
+from matplotlib.ticker import ScalarFormatter, FormatStrFormatter
+import matplotlib.pyplot as plt
+from pylab import mpl
 from dolfin import *
-import pylab 
+
+class FixedOrderFormatter(ScalarFormatter):
+  """
+  Formats axis ticks using scientific notation with a constant order of 
+  magnitude
+  """
+  def __init__(self, order_of_mag=0, useOffset=True, useMathText=False):
+    self._order_of_mag = order_of_mag
+    ScalarFormatter.__init__(self, useOffset=useOffset, 
+                             useMathText=useMathText)
+  def _set_orderOfMagnitude(self, range):
+    """
+    Over-riding this to avoid having orderOfMagnitude reset elsewhere
+    """
+    self.orderOfMagnitude = self._order_of_mag
+
+mpl.rcParams['font.family']     = 'serif'
+mpl.rcParams['legend.fontsize'] = 'medium'
 
 ### SIMULATION PARAMETERS ###
 dt    = .01           # time step
@@ -29,7 +50,7 @@ L     = xr - xl       # length of domain
 # Unit interval mesh
 mesh  = IntervalMesh(50,xl,xr)
 h     = CellSize(mesh)
-coord = mesh.coordinates()
+xcrd  = mesh.coordinates()
 
 # Create FunctionSpace
 Q     = FunctionSpace(mesh, "CG", 1)
@@ -135,9 +156,30 @@ out_file = File("results/ice_profile.pvd")
 # Set intial condition
 #u0 = u_ 
 H  = H0
+
 # Plot solution
-plot(u_,title='Velocity')
-plot(H,title='Thickness')
+plt.ion()
+Hplot = project(H,  Q).vector().array()
+uplot = project(u_, Q).vector().array()
+
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+hp, = ax1.plot(xcrd, Hplot, 'k', lw=2)
+ax1.set_xlabel('$x$ [m]')
+ax1.set_ylabel('$H$ [m]')
+ax1.set_ylim([0,20])
+
+ax2 = ax1.twinx()
+gry = '0.4'
+up, = ax2.plot(xcrd, uplot, gry, lw=2)
+ax2.set_ylabel('$u$ [m/s]', color=gry)
+for tl in ax2.get_yticklabels():
+  tl.set_color(gry)
+
+ax1.grid()
+ax1.xaxis.set_major_formatter(FixedOrderFormatter(4))
+
+plt.draw()
 
 raw_input("Press enter...")
 
@@ -152,19 +194,18 @@ while t < T:
 
   # Solve the linear system 
   #H_solver.solve(H.vector(),b)
-
   H_solver.solve()
-  # Constrain to positive thickness
-  H_.vector()[H_.vector().array()<H_MIN] = H_MIN
-
 
   # Copy solution from previous interval
   H0 = H_ 
   u0 = u_
 
   # Plot solution
-  plot(u_,title='Velocity')
-  plot(H,title='Thickness')
+  Hplot = project(H,  Q).vector().array()
+  uplot = project(u_, Q).vector().array()
+  hp.set_ydata(Hplot)
+  up.set_ydata(uplot)
+  plt.draw() 
 
   # Save the solution to file
   out_file << (H_, t)
