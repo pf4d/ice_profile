@@ -139,10 +139,10 @@ fu    = - rho * g * H * zs.dx(0) * v * dx - \
           B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * v * dx
 
 #          2. * B * H0 * gn * v * ds + \
-#fu    = - rho * g * H0 * zs.dx(0) * v * dx - \
-#          mu * (H0 - rho_w / rho * zb)**q * u_mid**p * v * dx + \
-#          2. * B * H0 * u_mid.dx(0)**(1/n) * v.dx(0) * dx - \
-#          B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * v * dx
+fu    = - rho * g * H0 * zs.dx(0) * v * dx - \
+          mu * (H0 - rho_w / rho * zb)**q * u_mid**p * v * dx + \
+          2. * B * H0 * u_mid.dx(0)**(1/n) * v.dx(0) * dx - \
+          B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * v * dx
 
 # Momentum balance with regularization on viscosity
 #s  = 1e-6
