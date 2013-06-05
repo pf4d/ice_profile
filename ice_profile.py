@@ -48,7 +48,7 @@ A     = B**-n         #
 xl    = 0.            # left edge (divide)
 xr    = 1500.e3       # right edge (margin/terminus)
 H0    = 200.          # thickness at divide
-a     = 4/3.
+a     = 1#4/3.
 L     = (xr - xl)/a   # length of domain
 ela   = 3/4. * L / 1000
 
@@ -59,7 +59,7 @@ xcrd  = mesh.coordinates()/1000  # divide for units in km.
 
 # Create FunctionSpace
 Q     = FunctionSpace(mesh, "CG", 1)
-MQ    = Q * Q
+MQ    = MixedFunctionSpace([Q, Q])
 
 # Boundary conditions:
 def divide(x,on_boundary):
@@ -69,8 +69,12 @@ def terminus(x,on_boundary):
   return on_boundary and x[0] > xr - 1.e-6
 
 # Dirichlet conditions :
-H_bc = DirichletBC(MQ.sub(0), H_MIN, terminus)  # height at terminus
+H_bc = DirichletBC(MQ.sub(0), H_MIN, terminus)  # thickness at terminus
 u_bc = DirichletBC(MQ.sub(1), 0.,    divide)    # velocity at divide
+bcs  = [H_bc, u_bc]
+bcs  = H_bc
+bcs  = []#H_bc
+bcs  = [H_bc, u_bc]
 
 # Neumann conditions :
 code = 'A * pow(rho*g/4 *(H - rho_w/rho * pow(D, 2) /H - sb/(rho*g)), n)'
@@ -86,9 +90,10 @@ zs   = interpolate(Expression(p0,L=L,H0=H0,n=n),Q)
 zt   = nan_to_num(zs.vector().array())
 zt[where(zt <= H_MIN)[0]] = H_MIN
 zs.vector().set_local(zt)
+zs   = interpolate(Constant(1.0),Q)
 
 # bed :
-zb   = interpolate(Constant(0),Q)
+zb   = interpolate(Constant(10),Q)
 
 # thickness :
 H_i  = project(zs-zb,Q)
@@ -103,19 +108,19 @@ u_i  = interpolate(Constant(0.0),Q)
 adot = Expression('amax * ( .75 - x[0] / L)',L=L,amax=amax)
 
 # variational problem :
-h        = Function(MQ)                      # solution
-H, u     = split(h)                          # solutions for H, u
-h0       = Function(MQ)                      # previous solution
-H0, u0   = split(h0)                         # previous solutions for H, u
+U         = Function(MQ)                    # solution
+H,u       = split(U)                        # solutions for H, u
+U0        = Function(MQ)                    # previous solution
+H0,u0     = split(U0)                       # previous solutions for H, u
 
-dh       = TrialFunction(MQ)                 # trial function for solution
-dH, du   = split(dh)                         # trial functions for H, u
-j        = TestFunction(MQ)                  # test function in mixed space
-phi, v   = split(j)                          # test functions for H, u
+dU        = TrialFunction(MQ)               # trial function for solution
+dH,du     = split(dU)                       # trial functions for H, u
+j         = TestFunction(MQ)                # test function in mixed space
+phi,psi   = split(j)                        # test functions for H, u
 
-h_i = project(as_vector([H_i,u_i]), MQ)      # project inital values on space
-h.vector().set_local(h_i.vector().array())   # initalize H, u in solution
-h0.vector().set_local(h_i.vector().array())  # initalize H, u in prev. sol
+U_i = project(as_vector([H_i,u_i]), MQ)     # project inital values on space
+U.vector().set_local(U_i.vector().array())  # initalize H, u in solution
+U0.vector().set_local(U_i.vector().array()) # initalize H, u in prev. sol
 
 # SUPG method phihat :        
 unorm  = sqrt(dot(u, u) + 1e-10)
@@ -131,18 +136,12 @@ fH    = (H-H0)/dt * phi * dx + \
 # Momentum balance: weak form of equation 9.65 of vanderveen
 theta = 1
 u_mid = theta*u + (1 - theta)*u0
-#          2. * B * H/n * u_mid.dx(0)**(1/n - 1) * gn * v * ds - \
-fu    = - rho * g * H * zs.dx(0) * v * dx - \
-          mu * (H - rho_w / rho * zb)**q * u_mid**p * v * dx + \
-          2. * B * H.dx(0) * u_mid.dx(0)**(1/n) * v * dx - \
-          2. * B * H/n * u_mid.dx(0)**(1/n - 1) * u_mid.dx(0) * v.dx(0) * dx - \
-          B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * v * dx
-
-#          2. * B * H0 * gn * v * ds + \
-fu    = - rho * g * H0 * zs.dx(0) * v * dx - \
-          mu * (H0 - rho_w / rho * zb)**q * u_mid**p * v * dx + \
-          2. * B * H0 * u_mid.dx(0)**(1/n) * v.dx(0) * dx - \
-          B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * v * dx
+h     = H0 + zb
+#         2. * B * H * gn * psi.dx(0) * ds - \
+fu    = - rho * g * H * h.dx(0) * psi * dx - \
+          mu * (H - rho_w / rho * zb)**q * u_mid**p * psi * dx - \
+          2. * B * H * inner(u_mid.dx(0)**(1/n), psi.dx(0)) * dx - \
+          B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
 # Momentum balance with regularization on viscosity
 #s  = 1e-6
@@ -152,10 +151,10 @@ fu    = - rho * g * H0 * zs.dx(0) * v * dx - \
 #       B * H0 / W * (((n+2) * u_mid)/(2*W))**(1/n) * v * dx
 
 f     = fH + fu
-df    = derivative(f, h, dh)
+df    = derivative(f, U, dU)
 
 # Create non-linear solver instance
-problem = NonlinearVariationalProblem(f, h, [H_bc, u_bc], J=df)
+problem = NonlinearVariationalProblem(f, U, bcs, J=df)
 solver  = NonlinearVariationalSolver(problem)
 
 prm = solver.parameters
@@ -196,7 +195,7 @@ ax3.set_ylabel('$\dot{a}$ [m/a]')
 hp, = ax1.plot(xcrd, Hplot, 'k', lw=2)
 ax1.set_xlabel('$x$ [km]')
 ax1.set_ylabel('$H$ [m]')
-ax1.set_ylim([-200,2000])
+ax1.set_ylim([-100,1000])
 
 ax2 = ax1.twinx()
 ax2.axvline(x=ela, lw=2, color = gry)
@@ -224,18 +223,18 @@ while t < T:
   solver.solve()
 
   # Copy solution from previous interval
-  h0.assign(h)
+  U0.assign(U)
 
   # Plot solution
   Hplot = project(H, Q).vector().array()
   uplot = project(u, Q).vector().array()
-  Hplot[where(Hplot < H_MIN)[0]] = H_MIN
+  #Hplot[where(Hplot < H_MIN)[0]] = H_MIN
 
   # update the dolfin vectors :
   H_i.vector().set_local(Hplot)
-  h_new = project(as_vector([H_i, u]), MQ)
-  h.vector().set_local(h_new.vector().array())
-  zs = project(H, Q)
+  U_new = project(as_vector([H_i, u]), MQ)
+  #U.vector().set_local(U_new.vector().array())
+  #zs = project(H, Q)
 
   hp.set_ydata(Hplot)
   up.set_ydata(uplot)
