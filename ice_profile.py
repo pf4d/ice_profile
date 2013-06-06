@@ -71,9 +71,7 @@ def terminus(x,on_boundary):
 # Dirichlet conditions :
 H_bc = DirichletBC(MQ.sub(0), H_MIN, terminus)  # thickness at terminus
 u_bc = DirichletBC(MQ.sub(1), 0.,    divide)    # velocity at divide
-bcs  = [H_bc, u_bc]
-bcs  = H_bc
-bcs  = []#H_bc
+bcs  = []
 bcs  = [H_bc, u_bc]
 
 # Neumann conditions :
@@ -93,7 +91,7 @@ zs.vector().set_local(zt)
 zs   = interpolate(Constant(1.0),Q)
 
 # bed :
-zb   = interpolate(Constant(10),Q)
+zb   = interpolate(Constant(0.0),Q)
 
 # thickness :
 H_i  = project(zs-zb,Q)
@@ -129,26 +127,30 @@ phihat = phi + cellh/(2*unorm)*dot(u, phi.dx(0))
 # Continuity equation: weak form of eqn. 9.54 of vanderveen
 theta = 0.5
 H_mid = theta*H + (1 - theta)*H0
-fH    = (H-H0)/dt * phi * dx + \
-        1/(2*W) * (2*H_mid*u*W).dx(0) * phihat * dx - \
-        adot * phihat * dx
+fH    = + (H-H0)/dt * phi * dx \
+        + 1/(2*W) * (2*H_mid*u*W).dx(0) * phihat * dx \
+        - adot * phihat * dx
+
+# SUPG method psihat :        
+unorm  = sqrt(dot(u, u) + 1e-10)
+psihat = psi + cellh/(2*unorm)*dot(u, psi.dx(0))
 
 # Momentum balance: weak form of equation 9.65 of vanderveen
-theta = 1
+theta = 1.0
 u_mid = theta*u + (1 - theta)*u0
 h     = H0 + zb
-#         2. * B * H * gn * psi.dx(0) * ds - \
-fu    = - rho * g * H * h.dx(0) * psi * dx - \
-          mu * (H - rho_w / rho * zb)**q * u_mid**p * psi * dx - \
-          2. * B * H * inner(u_mid.dx(0)**(1/n), psi.dx(0)) * dx - \
-          B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
+#        - 2. * B * H * gn * psi.dx(0) * ds \
+fu    = + rho * g * H * h.dx(0) * psi * dx \
+        + mu * (H0 - rho_w / rho * zb)**q * u_mid**p * psi * dx \
+        + 2. * B * H * inner(u_mid.dx(0)**(1/n), psi.dx(0)) * dx \
+        + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
 # Momentum balance with regularization on viscosity
 #s  = 1e-6
-#fu = - rho * g * H0 * zs.dx(0) * v * dx - \
-#       mu * (H0 - rho_w / rho * zb)**q * u_mid**p * v * dx + \
-#       2. * B * H_mid * abs(u.dx(0) + s)**((1-n)/n)*u.dx(0) * v.dx(0) * dx - \
-#       B * H0 / W * (((n+2) * u_mid)/(2*W))**(1/n) * v * dx
+#fu = rho * g * H * zs.dx(0) * psi * dx + \
+#     mu * (H - rho_w / rho * zb)**q * u_mid**p * psi * dx - \
+#     2. * B * H_mid * abs(u.dx(0) + s)**((1-n)/n)*u.dx(0) * psi.dx(0) * dx + \
+#     B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
 f     = fH + fu
 df    = derivative(f, U, dU)
@@ -222,19 +224,20 @@ while t < T:
   # Solve the nonlinear system 
   solver.solve()
 
-  # Copy solution from previous interval
-  U0.assign(U)
-
   # Plot solution
   Hplot = project(H, Q).vector().array()
   uplot = project(u, Q).vector().array()
-  #Hplot[where(Hplot < H_MIN)[0]] = H_MIN
+  Hplot[where(Hplot < H_MIN)[0]] = H_MIN
+  uplot[where(Hplot < H_MIN)[0]] = 0.0
 
   # update the dolfin vectors :
   H_i.vector().set_local(Hplot)
-  U_new = project(as_vector([H_i, u]), MQ)
-  #U.vector().set_local(U_new.vector().array())
-  #zs = project(H, Q)
+  u_i.vector().set_local(uplot)
+  U_new = project(as_vector([H_i, u_i]), MQ)
+  U.vector().set_local(U_new.vector().array())
+
+  # Copy solution from previous interval
+  U0.assign(U)
 
   hp.set_ydata(Hplot)
   up.set_ydata(uplot)
