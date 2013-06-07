@@ -6,21 +6,6 @@ import matplotlib.pyplot as plt
 from pylab import mpl
 from dolfin import *
 
-class FixedOrderFormatter(ScalarFormatter):
-  """
-  Formats axis ticks using scientific notation with a constant order of 
-  magnitude
-  """
-  def __init__(self, order_of_mag=0, useOffset=True, useMathText=False):
-    self._order_of_mag = order_of_mag
-    ScalarFormatter.__init__(self, useOffset=useOffset, 
-                             useMathText=useMathText)
-  def _set_orderOfMagnitude(self, range):
-    """
-    Over-riding this to avoid having orderOfMagnitude reset elsewhere
-    """
-    self.orderOfMagnitude = self._order_of_mag
-
 mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
 
@@ -70,7 +55,7 @@ def terminus(x,on_boundary):
 
 # Dirichlet conditions :
 H_bc = DirichletBC(MQ.sub(0), H_MIN, terminus)  # thickness at terminus
-u_bc = DirichletBC(MQ.sub(1), 0.,    divide)    # velocity at divide
+u_bc = DirichletBC(MQ.sub(1), 0.0,   divide)    # velocity at divide
 bcs  = []
 bcs  = [H_bc, u_bc]
 
@@ -102,32 +87,24 @@ zs   = interpolate(Constant(H0),Q)
 # bed :
 zb   = interpolate(Constant(0.0),Q)
 
-# thickness :
-H_i  = project(zs-zb,Q)
+# initial thickness :
+H0   = project(zs-zb,Q)
 
 # half width :
-W    = interpolate(Constant(1000.),Q)
+W    = interpolate(Constant(1000000.),Q)
 
 # initial velocity :
-u_i  = interpolate(Constant(0.0),Q) 
+u0   = interpolate(Constant(0.0),Q) 
 
 # accumulation :
 adot = Expression('amax * ( .75 - x[0] / L)',L=L,amax=amax)
 
 # variational problem :
-U         = Function(MQ)                    # solution
-H,u       = split(U)                        # solutions for H, u
-U0        = Function(MQ)                    # previous solution
-H0,u0     = split(U0)                       # previous solutions for H, u
-
-dU        = TrialFunction(MQ)               # trial function for solution
-dH,du     = split(dU)                       # trial functions for H, u
-j         = TestFunction(MQ)                # test function in mixed space
-phi,psi   = split(j)                        # test functions for H, u
-
-U_i = project(as_vector([H_i,u_i]), MQ)     # project inital values on space
-U.vector().set_local(U_i.vector().array())  # initalize H, u in solution
-U0.vector().set_local(U_i.vector().array()) # initalize H, u in prev. sol
+# Test and trial functions
+H, phi = TrialFunction(Q), TestFunction(Q)   # for thickness
+u, psi = TrialFunction(Q), TestFunction(Q)   # for velocity
+u_     = Function(Q)
+H_     = Function(Q)
 
 # SUPG method phihat :        
 unorm  = sqrt(dot(u, u) + 1e-10)
@@ -139,6 +116,10 @@ H_mid = theta*H + (1 - theta)*H0
 fH    = + (H-H0)/dt * phi * dx \
         + 1/(2*W) * (2*H_mid*u*W).dx(0) * phihat * dx \
         - adot * phihat * dx
+
+# Create bilinear and linear forms
+aH = lhs(fH)
+LH = rhs(fH)
 
 # SUPG method psihat :        
 unorm  = sqrt(dot(u, u) + 1e-10)
@@ -155,12 +136,16 @@ fu    = + rho * g * H * h.dx(0) * psi * dx \
         - 2. * B * H/n * u_mid.dx(0)**(1/n - 1) * gn * psi * ds \
         + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
-f     = fH + fu
-df    = derivative(f, U, dU)
+fu    = action(fu, u_)
+df    = derivative(fu, u_, u)
+
+# Create linear solver instance
+H_problem = LinearVariationalProblem(aH, LH, H_, H_bc)
+H_solver  = LinearVariationalSolver(H_problem)
 
 # Create non-linear solver instance
-problem = NonlinearVariationalProblem(f, U, bcs, J=df)
-solver  = NonlinearVariationalSolver(problem)
+u_problem = NonlinearVariationalProblem(fu, u_, u_bc, J=df)
+u_solver  = NonlinearVariationalSolver(problem)
 
 prm = solver.parameters
 prm['newton_solver']['absolute_tolerance']   = 1E-8
@@ -213,8 +198,6 @@ for tl in ax2.get_yticklabels():
 fig_text = plt.figtext(.80,.95,'Time = 0.0 yr')
 
 ax1.grid()
-#ax1.xaxis.set_major_formatter(FixedOrderFormatter(4))
-#ax3.xaxis.set_major_formatter(FixedOrderFormatter(4))
 
 plt.draw()
 
@@ -224,8 +207,9 @@ while t < tf:
   #b = assemble(LH)
   #H_bc.apply(b)
 
-  # Solve the nonlinear system 
-  solver.solve()
+  # Solve the system 
+  u_solver.solve()
+  H_solver.solve()
 
   # Plot solution
   Hplot = project(H, Q).vector().array()
@@ -240,7 +224,8 @@ while t < tf:
   U.vector().set_local(U_new.vector().array())
 
   # Copy solution from previous interval
-  U0.assign(U)
+  H0 = H_
+  u0 = u_
 
   hp.set_ydata(Hplot)
   up.set_ydata(uplot)

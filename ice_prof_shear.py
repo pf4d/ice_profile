@@ -47,7 +47,7 @@ A     = B**-n         #
 ### DOMAIN DESCRIPTION ###
 xl    = 0.            # left edge (divide)
 xr    = 1500.e3       # right edge (margin/terminus)
-H0    = 100.          # thickness at divide
+H0    = 10.           # thickness at divide
 a     = 1#4/3.
 L     = (xr - xl)/a   # length of domain
 ela   = 3/4. * L / 1000
@@ -105,9 +105,6 @@ zb   = interpolate(Constant(0.0),Q)
 # thickness :
 H_i  = project(zs-zb,Q)
 
-# half width :
-W    = interpolate(Constant(1000.),Q)
-
 # initial velocity :
 u_i  = interpolate(Constant(0.0),Q) 
 
@@ -137,7 +134,7 @@ phihat = phi + cellh/(2*unorm)*dot(u, phi.dx(0))
 theta = 0.5
 H_mid = theta*H + (1 - theta)*H0
 fH    = + (H-H0)/dt * phi * dx \
-        + 1/(2*W) * (2*H_mid*u*W).dx(0) * phihat * dx \
+        + (H_mid*u).dx(0) * phihat * dx \
         - adot * phihat * dx
 
 # SUPG method psihat :        
@@ -148,12 +145,8 @@ psihat = psi + cellh/(2*unorm)*dot(u, psi.dx(0))
 theta = 1.0
 u_mid = theta*u + (1 - theta)*u0
 h     = H0 + zb
-fu    = + rho * g * H * h.dx(0) * psi * dx \
-        + mu * (H0 - rho_w / rho * zb)**q * u_mid**p * psi * dx \
-        - 2. * B * H * H.dx(0) * u_mid.dx(0)**(1/n) * psi * dx \
-        + 2. * B * H/n * u_mid.dx(0)**(1/n - 1) * u_mid.dx(0) * psi.dx(0) * dx \
-        - 2. * B * H/n * u_mid.dx(0)**(1/n - 1) * gn * psi * ds \
-        + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
+fu    = + u * psi * dx \
+        - 2 * A * H / (n+2) * (-rho * g * H * h.dx(0))**n * psi * dx
 
 f     = fH + fu
 df    = derivative(f, U, dU)
@@ -165,7 +158,7 @@ solver  = NonlinearVariationalSolver(problem)
 prm = solver.parameters
 prm['newton_solver']['absolute_tolerance']   = 1E-8
 prm['newton_solver']['relative_tolerance']   = 1E-7
-prm['newton_solver']['maximum_iterations']   = 100
+prm['newton_solver']['maximum_iterations']   = 25
 prm['newton_solver']['relaxation_parameter'] = 0.8
 
 solver.solve()
@@ -230,14 +223,14 @@ while t < tf:
   # Plot solution
   Hplot = project(H, Q).vector().array()
   uplot = project(u, Q).vector().array()
-  Hplot[where(Hplot < H_MIN)[0]] = H_MIN
-  uplot[where(Hplot < H_MIN)[0]] = 0.0
+  #Hplot[where(Hplot < H_MIN)[0]] = H_MIN
+  #uplot[where(Hplot < H_MIN)[0]] = 0.0
 
   # update the dolfin vectors :
   H_i.vector().set_local(Hplot)
   u_i.vector().set_local(uplot)
   U_new = project(as_vector([H_i, u_i]), MQ)
-  U.vector().set_local(U_new.vector().array())
+  #U.vector().set_local(U_new.vector().array())
 
   # Copy solution from previous interval
   U0.assign(U)
