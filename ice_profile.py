@@ -27,7 +27,7 @@ mpl.rcParams['legend.fontsize'] = 'medium'
 ### SIMULATION PARAMETERS ###
 dt    = 5.000         # time step
 t     = 0.            # begining time
-T     = 50000.        # end time
+T     = 200#50000.        # end time
 H_MIN = 1.            # Minimal ice thickness
 
 ### PHYSICAL CONSTANTS ###
@@ -35,7 +35,7 @@ spy   = 31556926.     # seconds per year
 rho   = 911.          # density of ice (kg/m^3)
 rho_w = 1000.         # density of water (kg/m^3)
 g     = 9.81 * spy**2 # gravitation acceleration (m/yr^2)
-n     = 3             # flow law exponent
+n     = 3.            # flow law exponent
 B     = 750.e3        # flow law temperature sensitivity factor (Pa*yr^.333)
 amax  = .5            # max accumlation/ablation rate
 mu    = 1.e16         # Basal traction constant
@@ -47,7 +47,7 @@ A     = B**-n         #
 ### DOMAIN DESCRIPTION ###
 xl    = 0.            # left edge (divide)
 xr    = 1500.e3       # right edge (margin/terminus)
-H0    = 200.          # thickness at divide
+H0    = 1.            # thickness at divide
 a     = 1#4/3.
 L     = (xr - xl)/a   # length of domain
 ela   = 3/4. * L / 1000
@@ -77,6 +77,15 @@ bcs  = [H_bc, u_bc]
 # Neumann conditions :
 code = 'A * pow(rho*g/4 *(H - rho_w/rho * pow(D, 2) /H - sb/(rho*g)), n)'
 gn   = Expression(code, A=A, rho=rho, g=g, H=H0, rho_w=rho_w, D=0, sb=sb, n=n)
+
+boundary_markers = FacetFunction("uint", mesh)
+
+class terminus_velocity(SubDomain):
+  def inside(self, x, on_boundary):
+    return on_boundary and x[0] > xr - 1e-6
+
+Gamma_N = terminus_velocity()
+Gamma_N.mark(boundary_markers, 4)
 
 # INTIAL CONDITIONS:
 # surface :
@@ -139,7 +148,7 @@ psihat = psi + cellh/(2*unorm)*dot(u, psi.dx(0))
 theta = 1.0
 u_mid = theta*u + (1 - theta)*u0
 h     = H0 + zb
-#        - 2. * B * H * gn * psi.dx(0) * ds \
+#        - 2. * B * H * gn * psi * ds \
 fu    = + rho * g * H * h.dx(0) * psi * dx \
         + mu * (H0 - rho_w / rho * zb)**q * u_mid**p * psi * dx \
         + 2. * B * H * inner(u_mid.dx(0)**(1/n), psi.dx(0)) * dx \
