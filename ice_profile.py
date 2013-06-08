@@ -78,14 +78,15 @@ bcs  = [H_bc, u_bc]
 code = 'A * pow(rho*g/4 *(H - rho_w/rho * pow(D, 2) /H - sb/(rho*g)), n)'
 gn   = Expression(code, A=A, rho=rho, g=g, H=H0, rho_w=rho_w, D=0, sb=sb, n=n)
 
-boundary_markers = FacetFunction("uint", mesh)
-
 class terminus_velocity(SubDomain):
   def inside(self, x, on_boundary):
-    return on_boundary and x[0] > xr - 1e-6
+    return on_boundary and x[0] > xr - DOLFIN_EPS
 
-Gamma_N = terminus_velocity()
-Gamma_N.mark(boundary_markers, 4)
+Gamma_N          = terminus_velocity()
+boundary_markers = FacetFunction("uint", mesh)
+boundary_markers.set_all(1)
+Gamma_N.mark(boundary_markers, 0)
+dss = ds[Gamma_N]
 
 # INTIAL CONDITIONS:
 # surface :
