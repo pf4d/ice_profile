@@ -6,43 +6,28 @@ import matplotlib.pyplot as plt
 from pylab import mpl
 from dolfin import *
 
-class FixedOrderFormatter(ScalarFormatter):
-  """
-  Formats axis ticks using scientific notation with a constant order of 
-  magnitude
-  """
-  def __init__(self, order_of_mag=0, useOffset=True, useMathText=False):
-    self._order_of_mag = order_of_mag
-    ScalarFormatter.__init__(self, useOffset=useOffset, 
-                             useMathText=useMathText)
-  def _set_orderOfMagnitude(self, range):
-    """
-    Over-riding this to avoid having orderOfMagnitude reset elsewhere
-    """
-    self.orderOfMagnitude = self._order_of_mag
-
 mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
-
-### SIMULATION PARAMETERS ###
-dt    = 5.000         # time step
-t     = 0.            # begining time
-tf    = 200#50000.        # end time
-H_MIN = 1.            # Minimal ice thickness
 
 ### PHYSICAL CONSTANTS ###
 spy   = 31556926.     # seconds per year
 rho   = 911.          # density of ice (kg/m^3)
 rho_w = 1000.         # density of water (kg/m^3)
-g     = 9.81 * spy**2 # gravitation acceleration (m/yr^2)
+g     = 9.81          # gravitation acceleration (m/yr^2)
 n     = 1.            # flow law exponent
-B     = 750.e3        # flow law temperature sensitivity factor (Pa*yr^.333)
+B     = 750.e3 / spy**(1/3.)  # flow law temperature sensitivity factor (Pa*yr^.333)
 amax  = .5            # max accumlation/ablation rate
 mu    = 1.e16         # Basal traction constant
 p     = 1.            # Basal sliding exponent
 q     = 1.            # Basal sliding exponent 
 sb    = 0.            # back stress
 A     = B**-n         # 
+
+### SIMULATION PARAMETERS ###
+dt    = 5.000 * spy   # time step
+t     = 0.            # begining time
+tf    = 200. * spy    # end time
+H_MIN = 1.            # Minimal ice thickness
 
 ### DOMAIN DESCRIPTION ###
 xl    = 0.            # left edge (divide)
@@ -214,44 +199,33 @@ for tl in ax2.get_yticklabels():
 fig_text = plt.figtext(.80,.95,'Time = 0.0 yr')
 
 ax1.grid()
-#ax1.xaxis.set_major_formatter(FixedOrderFormatter(4))
-#ax3.xaxis.set_major_formatter(FixedOrderFormatter(4))
 
 plt.draw()
 
 # Time-stepping
 while t < tf:
-  # Assemble vector and apply boundary conditions
-  #b = assemble(LH)
-  #H_bc.apply(b)
-
   # Solve the nonlinear system 
   solver.solve()
 
   # Plot solution
   Hplot = project(H, Q).vector().array()
   uplot = project(u, Q).vector().array()
-  Hplot[where(Hplot < H_MIN)[0]] = H_MIN
-  uplot[where(Hplot < H_MIN)[0]] = 0.0
+  #Hplot[where(Hplot < H_MIN)[0]] = H_MIN
+  #uplot[where(Hplot < H_MIN)[0]] = 0.0
 
   # update the dolfin vectors :
   H_i.vector().set_local(Hplot)
   u_i.vector().set_local(uplot)
-  U_new = project(as_vector([H_i, u_i]), MQ)
-  U.vector().set_local(U_new.vector().array())
+  #U_new = project(as_vector([H_i, u_i]), MQ)
+  #U.vector().set_local(U_new.vector().array())
 
   # Copy solution from previous interval
   U0.assign(U)
 
   hp.set_ydata(Hplot)
   up.set_ydata(uplot)
-  fig_text.set_text('Time = %.0f yr' % t) 
+  fig_text.set_text('Time = %.0f yr' % (t/spy)) 
   plt.draw() 
-
-  # Save the solution to file
-  #out_file << (H, t)
-  #out_file << (u, t)
 
   # Move to next interval and adjust boundary condition
   t += dt
-  #raw_input("Push enter to contiue")
