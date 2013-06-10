@@ -10,31 +10,31 @@ mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
 
 ### PHYSICAL CONSTANTS ###
-spy   = 31556926.     # seconds per year
-rho   = 911.          # density of ice (kg/m^3)
-rho_w = 1000.         # density of water (kg/m^3)
-g     = 9.81          # gravitation acceleration (m/yr^2)
-n     = 1.            # flow law exponent
-B     = 750.e3 / spy**(1/3.)  # flow law temperature sensitivity factor (Pa*yr^.333)
-amax  = .5            # max accumlation/ablation rate
-mu    = 1.e16         # Basal traction constant
-p     = 1.            # Basal sliding exponent
-q     = 1.            # Basal sliding exponent 
-sb    = 0.            # back stress
-A     = B**-n         # 
+spy   = 31556926.             # seconds per year ............... [s]
+rho   = 911.                  # density of ice ................. [kg m^-3]
+rho_w = 1000.                 # density of water ............... [kg m^-3]
+g     = 9.81                  # gravitation acceleration ....... [m s^-2]
+n     = 1.                    # flow law exponent
+B     = 750e3 / spy**(1/3.)   # ice hardeness .................. [Pa s^(1/n)]
+A     = B**-n                 # temp-dependent ice-flow factor.. [Pa^-n s^-1]
+amax  = .5                    # max accumlation/ablation rate .. [m s^-1]
+mu    = 1e16                  # Basal traction constant
+p     = 1.                    # Basal sliding exponent
+q     = 1.                    # Basal sliding exponent 
+sb    = 0.                    # back stress
 
 ### SIMULATION PARAMETERS ###
-dt    = 5.000 * spy   # time step
-t     = 0.            # begining time
-tf    = 200. * spy    # end time
-H_MIN = 1.            # Minimal ice thickness
+dt    = 5.000 * spy           # time step ...................... [s]
+t     = 0.                    # begining time .................. [s]
+tf    = 200. * spy            # end time ....................... [s]
+H_MIN = 1.                    # Minimal ice thickness .......... [m]
 
 ### DOMAIN DESCRIPTION ###
-xl    = 0.            # left edge (divide)
-xr    = 1500.e3       # right edge (margin/terminus)
-H0    = 100.          # thickness at divide
+xl    = 0.                    # left edge (divide) ............. [m]
+xr    = 1500e3                # right edge (margin/terminus) ... [m]
+H0    = 100.                  # thickness at divide ............ [m]
 a     = 1#4/3.
-L     = (xr - xl)/a   # length of domain
+L     = (xr - xl)/a           # length of domain ............... [m]
 ela   = 3/4. * L / 1000
 
 # Unit interval mesh
@@ -48,16 +48,16 @@ MQ    = MixedFunctionSpace([Q, Q])
 
 # Boundary conditions:
 def divide(x,on_boundary):
-  return on_boundary and x[0] < xl + 1.e-6
+  return on_boundary and x[0] < xl + 1e-6
 
 def terminus(x,on_boundary):
-  return on_boundary and x[0] > xr - 1.e-6
+  return on_boundary and x[0] > xr - 1e-6
 
 # Dirichlet conditions :
 H_bc = DirichletBC(MQ.sub(0), H_MIN, terminus)  # thickness at terminus
 u_bc = DirichletBC(MQ.sub(1), 0.,    divide)    # velocity at divide
 bcs  = []
-bcs  = [H_bc, u_bc]
+#bcs  = [H_bc, u_bc]
 
 # Neumann conditions :
 code = 'A * pow(rho*g/4 *(H - rho_w/rho * pow(D, 2) /H - sb/(rho*g)), n)'

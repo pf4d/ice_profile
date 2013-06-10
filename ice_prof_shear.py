@@ -9,28 +9,28 @@ from dolfin import *
 mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
 
-### SIMULATION PARAMETERS ###
-dt    = 0.005         # time step
-t     = 0.            # begining time
-tf    = 200#50000.        # end time
-H_MIN = 1.            # Minimal ice thickness
-
 ### PHYSICAL CONSTANTS ###
-spy   = 31556926.     # seconds per year
-rho   = 911.          # density of ice (kg/m^3)
-rho_w = 1000.         # density of water (kg/m^3)
-g     = 9.81 * spy**2 # gravitation acceleration (m/yr^2)
-n     = 3.            # flow law exponent
-B     = 750.e3        # flow law temperature sensitivity factor (Pa*yr^.333)
-amax  = .5            # max accumlation/ablation rate [m/yr] 
-A     = B**-n         # 
+spy   = 31556926.             # seconds per year ............... [s]
+rho   = 911.                  # density of ice ................. [kg m^-3]
+rho_w = 1000.                 # density of water ............... [kg m^-3]
+g     = 9.81                  # gravitation acceleration ....... [m s^-2]
+n     = 1.                    # flow law exponent
+A     = 4.529e-24             # temp-dependent ice-flow factor.. [Pa^-n s^-1]
+B     = A**(-1/n)             # ice hardeness .................. [Pa s^(1/n)]
+amax  = .5 / spy              # max accumlation/ablation rate .. [m s^-1]
+
+### SIMULATION PARAMETERS ###
+dt    = 5.000 * spy           # time step ...................... [s]
+t     = 0.                    # begining time .................. [s]
+tf    = 2000. * spy            # end time ....................... [s]
+H_MIN = 1.                    # Minimal ice thickness .......... [m]
 
 ### DOMAIN DESCRIPTION ###
-xl    = 0.            # left edge (divide)
-xr    = 1500.e3       # right edge (margin/terminus)
-Hd    = 100.          # thickness at divide
+xl    = 0.                    # left edge (divide) ............. [m]
+xr    = 1500e3                # right edge (margin/terminus) ... [m]
+Hd    = 100.                  # thickness at divide ............ [m]
 a     = 1#4/3.
-L     = (xr - xl)/a   # length of domain
+L     = (xr - xl)/a           # length of domain ............... [m]
 ela   = 3/4. * L / 1000
 
 # Unit interval mesh
@@ -87,9 +87,9 @@ Hnorm  = sqrt(dot(H, H) + 1e-10)
 phihat = phi + cellh/(2*Hnorm)*dot(H, phi.dx(0))
 
 # Continuity equation: weak form of eqn. 9.54 of vanderveen
-theta = 0.5
+theta = 1.0
 H_mid = theta*H + (1 - theta)*H0
-h     = H0 + zb
+h     = H_mid + zb
 D     = 2*A/(n+2) * (rho*g)**n * H_mid**(n+2) * h.dx(0)**(n-1)
 fH    = + (H-H0)/dt * phi * dx \
         + D * inner(h.dx(0), phi.dx(0)) * dx \
@@ -124,7 +124,7 @@ ax1 = plt.subplot(gs[0])
 ax3 = plt.subplot(gs[1])
 
 # plot the accumulation
-adotPlot = project(adot, Q).vector().array()
+adotPlot = project(adot, Q).vector().array() * spy
 ax3.axhline(lw=2, color = gry)
 ax3.axvline(x=ela, lw=2, color = gry)
 ax3.plot(xcrd, adotPlot, 'r', lw=2)
@@ -144,23 +144,23 @@ ax1.grid()
 plt.draw()
 
 # Time-stepping
-while t < tf:
+while t <= tf:
   # Solve the nonlinear system 
   solver.solve()
 
   # Plot solution
   Hplot = H.vector().array()
-  #Hplot[where(Hplot < H_MIN)[0]] = H_MIN
+  Hplot[where(Hplot < H_MIN)[0]] = H_MIN
 
   # update the dolfin vectors :
-  #H_i.vector().set_local(Hplot)
-  #H.assign(H_i)
+  H_i.vector().set_local(Hplot)
+  H.assign(H_i)
 
   # Copy solution from previous interval
   H0.assign(H)
 
   hp.set_ydata(Hplot)
-  fig_text.set_text('Time = %.0f yr' % t) 
+  fig_text.set_text('Time = %.0f yr' % (t/spy))
   plt.draw() 
 
   # Move to next interval and adjust boundary condition
