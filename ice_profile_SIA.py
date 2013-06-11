@@ -24,15 +24,15 @@ amax  = .5 / spy              # max accumlation/ablation rate .. [m s^-1]
 
 ### SIMULATION PARAMETERS ###
 dt    = 50.00 * spy           # time step ...................... [s]
-t     = 0.                    # begining time .................. [s]
-tf    = 150000. * spy         # end time ....................... [s]
+t0    = 0.                    # begining time .................. [s]
+tf    = 100000. * spy         # end time ....................... [s]
 H_MIN = 0.                    # Minimal ice thickness .......... [m]
 H_MAX = 5000.                 # Maximum plot height ............ [m]
 
 ### DOMAIN DESCRIPTION ###
 xl    = 0.                    # left edge (divide) ............. [m]
 xr    = 1500e3                # right edge (margin/terminus) ... [m]
-Hd    = 100.                  # thickness at divide ............ [m]
+Hd    = 100.0                 # thickness at divide ............ [m]
 a     = 2.
 L     = (xr - xl)/a           # length of domain ............... [m]
 ela   = 3/4. * L / 1000
@@ -57,7 +57,7 @@ H_bc = DirichletBC(Q, H_MIN, terminus)  # thickness at terminus
 
 # INTIAL CONDITIONS:
 # surface :
-zs   = interpolate(Constant(H_MIN),Q)
+zs   = interpolate(Constant(Hd),Q)
 
 # bed :
 zb   = interpolate(Constant(0.0),Q)
@@ -112,7 +112,7 @@ solver.solve()
 gry = '0.4'
 red = '#5f4300'
 pur = '#3d0057'
-clr = pur
+clr = gry
 
 plt.ion()
 
@@ -120,6 +120,7 @@ fig = plt.figure(figsize=(10,7))
 gs  = gridspec.GridSpec(2, 1, height_ratios=[3,1])
 ax1 = plt.subplot(gs[0])
 ax3 = plt.subplot(gs[1])
+#ax2 = ax1.twinx()
 
 # plot the accumulation
 adotPlot = project(adot, Q).vector().array() * spy
@@ -156,7 +157,7 @@ while t <= tf:
   Hplot = H.vector().array()
   Hplot[where(Hplot < H_MIN)[0]] = H_MIN
   hplot = Hplot + zb.vector().array() 
- 
+
   # update the dolfin vectors :
   H_i.vector().set_local(Hplot)
   H.assign(H_i)

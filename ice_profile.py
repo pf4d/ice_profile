@@ -173,6 +173,7 @@ fig = plt.figure(figsize=(10,7))
 gs  = gridspec.GridSpec(2, 1, height_ratios=[3,1])
 ax1 = plt.subplot(gs[0])
 ax3 = plt.subplot(gs[1])
+ax2 = ax1.twinx()
 
 # plot the accumulation
 adotPlot = project(adot, Q).vector().array() * spy
@@ -191,9 +192,8 @@ ax1.set_ylim([-100,1000])
 ax1.set_xlim([xl/1000, xr/1000])
 ax1.grid()
 
-ax2 = ax1.twinx()
+up,    = ax2.plot(xcrd, uplot, clr, lw=2)
 ax2.axvline(x=ela, lw=2, color = gry)
-up, = ax2.plot(xcrd, uplot, clr, lw=2)
 ax2.set_ylabel('$u$ [m/a]', color=clr)
 ax2.set_xlim([xl/1000, xr/1000])
 ax2.grid()
