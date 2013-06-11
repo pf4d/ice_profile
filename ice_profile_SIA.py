@@ -87,12 +87,14 @@ Hnorm  = sqrt(dot(H, H) + 1e-10)
 phihat = phi + cellh/(2*Hnorm)*dot(H, phi.dx(0))
 
 # Continuity equation: weak form of eqn. 9.54 of vanderveen
-theta = 1.0
+theta = 0.5
 H_mid = theta*H + (1 - theta)*H0
 h     = H_mid + zb
 D     = 2*A/(n+2) * (rho*g)**n * H_mid**(n+2) * h.dx(0)**(n-1)
+gn    = Expression("-0.0")
 fH    = + (H-H0)/dt * phi * dx \
         + D * inner(h.dx(0), phi.dx(0)) * dx \
+        - D * gn * phi * ds \
         - adot * phi * dx
 
 df    = derivative(fH, H, dH)
