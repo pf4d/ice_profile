@@ -1,6 +1,6 @@
 #!/usr/bin/python
 from numpy import *
-from matplotlib.ticker import ScalarFormatter, FormatStrFormatter
+import numpy as np
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from pylab import mpl
@@ -15,21 +15,25 @@ rho   = 911.                  # density of ice ................. [kg m^-3]
 rho_w = 1000.                 # density of water ............... [kg m^-3]
 g     = 9.81                  # gravitation acceleration ....... [m s^-2]
 n     = 3.                    # flow law exponent
-A     = 4.529e-24             # temp-dependent ice-flow factor.. [Pa^-n s^-1]
+Tm    = 273.15                # tripple point of water ......... [K]
+R     = 8.314                 # gas constant ................... [J (mol K)^-1]
+c     = 1.73e3
+A     = c*exp(-13.9e4/(R*Tm)) # temp-dependent ice-flow factor.. [Pa^-n s^-1]
 B     = A**(-1/n)             # ice hardeness .................. [Pa s^(1/n)]
 amax  = .5 / spy              # max accumlation/ablation rate .. [m s^-1]
 
 ### SIMULATION PARAMETERS ###
-dt    = 5.000 * spy           # time step ...................... [s]
+dt    = 50.00 * spy           # time step ...................... [s]
 t     = 0.                    # begining time .................. [s]
-tf    = 2000. * spy            # end time ....................... [s]
-H_MIN = 1.                    # Minimal ice thickness .......... [m]
+tf    = 150000. * spy         # end time ....................... [s]
+H_MIN = 0.                    # Minimal ice thickness .......... [m]
+H_MAX = 5000.                 # Maximum plot height ............ [m]
 
 ### DOMAIN DESCRIPTION ###
 xl    = 0.                    # left edge (divide) ............. [m]
 xr    = 1500e3                # right edge (margin/terminus) ... [m]
 Hd    = 100.                  # thickness at divide ............ [m]
-a     = 1#4/3.
+a     = 2.
 L     = (xr - xl)/a           # length of domain ............... [m]
 ela   = 3/4. * L / 1000
 
@@ -53,18 +57,11 @@ H_bc = DirichletBC(Q, H_MIN, terminus)  # thickness at terminus
 
 # INTIAL CONDITIONS:
 # surface :
-# This equilibrium profile comes from vanderVeen p. 126, eq 5.50
-p0   = 'Hd / pow(n-1,n/(2*n+2)) * pow(( (n+1) * x[0] / L'+\
-       '- 1 + n * pow(( 1 - x[0]  / L ),1+1/n) '+\
-       '- n *  pow( x[0]/L,1+1/n)),n/(2*n+2))'
-zs   = interpolate(Expression(p0,L=L,Hd=Hd,n=n),Q)
-zt   = nan_to_num(zs.vector().array())
-zt[where(zt <= H_MIN)[0]] = H_MIN
-zs.vector().set_local(zt)
-#zs   = interpolate(Constant(Hd),Q)
+zs   = interpolate(Constant(H_MIN),Q)
 
 # bed :
 zb   = interpolate(Constant(0.0),Q)
+zb   = interpolate(Expression("100*sin(x[0]/10000)"),Q)
 
 # thickness :
 H_i  = project(zs-zb,Q)
@@ -118,7 +115,6 @@ pur = '#3d0057'
 clr = pur
 
 plt.ion()
-Hplot = H.vector().array()
 
 fig = plt.figure(figsize=(10,7))
 gs  = gridspec.GridSpec(2, 1, height_ratios=[3,1])
@@ -130,14 +126,20 @@ adotPlot = project(adot, Q).vector().array() * spy
 ax3.axhline(lw=2, color = gry)
 ax3.axvline(x=ela, lw=2, color = gry)
 ax3.plot(xcrd, adotPlot, 'r', lw=2)
-ax3.grid()
 ax3.set_xlabel('$x$ [km]')
 ax3.set_ylabel('$\dot{a}$ [m/a]')
+ax3.set_xlim([xl/1000, xr/1000])
+ax3.grid()
 
-hp, = ax1.plot(xcrd, Hplot, 'k', lw=2)
+zbPlot = project(zb, Q).vector().array()
+hplot  = project((H + zb), Q).vector().array()
+zbp,   = ax1.plot(xcrd, zbPlot, pur, lw=2)
+hp,    = ax1.plot(xcrd, hplot, 'k',  lw=2)
+ax1.axvline(x=ela, lw=2, color = gry)
 ax1.set_xlabel('$x$ [km]')
 ax1.set_ylabel('$H$ [m]')
-ax1.set_ylim([-100,1000])
+ax1.set_ylim([-100,H_MAX])
+ax1.set_xlim([xl/1000, xr/1000])
 
 fig_text = plt.figtext(.80,.95,'Time = 0.0 yr')
 
@@ -153,7 +155,8 @@ while t <= tf:
   # Plot solution
   Hplot = H.vector().array()
   Hplot[where(Hplot < H_MIN)[0]] = H_MIN
-
+  hplot = Hplot + zb.vector().array() 
+ 
   # update the dolfin vectors :
   H_i.vector().set_local(Hplot)
   H.assign(H_i)
@@ -161,7 +164,7 @@ while t <= tf:
   # Copy solution from previous interval
   H0.assign(H)
 
-  hp.set_ydata(Hplot)
+  hp.set_ydata(hplot)
   fig_text.set_text('Time = %.0f yr' % (t/spy))
   plt.draw() 
 
