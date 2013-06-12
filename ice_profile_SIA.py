@@ -24,10 +24,11 @@ amax  = .5 / spy              # max accumlation/ablation rate .. [m s^-1]
 
 ### SIMULATION PARAMETERS ###
 dt    = 50.00 * spy           # time step ...................... [s]
-t0    = 0.                    # begining time .................. [s]
+t     = 0.                    # begining time .................. [s]
 tf    = 100000. * spy         # end time ....................... [s]
 H_MIN = 0.                    # Minimal ice thickness .......... [m]
 H_MAX = 5000.                 # Maximum plot height ............ [m]
+D_MAX = 100.                  # maximum depth of bed ........... [m]
 
 ### DOMAIN DESCRIPTION ###
 xl    = 0.                    # left edge (divide) ............. [m]
@@ -61,7 +62,7 @@ zs   = interpolate(Constant(Hd),Q)
 
 # bed :
 zb   = interpolate(Constant(0.0),Q)
-zb   = interpolate(Expression("100*sin(x[0]/10000)"),Q)
+zb   = interpolate(Expression("D_MAX*sin(x[0]/10000)",D_MAX=D_MAX),Q)
 
 # thickness :
 H_i  = project(zs-zb,Q)
@@ -137,9 +138,10 @@ hplot  = project((H + zb), Q).vector().array()
 zbp,   = ax1.plot(xcrd, zbPlot, pur, lw=2)
 hp,    = ax1.plot(xcrd, hplot, 'k',  lw=2)
 ax1.axvline(x=ela, lw=2, color = gry)
+ax1.plot(xcrd, [H_MAX] * len(xcrd), 'r+')
 ax1.set_xlabel('$x$ [km]')
-ax1.set_ylabel('$H$ [m]')
-ax1.set_ylim([-100,H_MAX])
+ax1.set_ylabel('$h$ [m]')
+ax1.set_ylim([-D_MAX,H_MAX])
 ax1.set_xlim([xl/1000, xr/1000])
 
 fig_text = plt.figtext(.80,.95,'Time = 0.0 yr')

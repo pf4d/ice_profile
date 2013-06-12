@@ -9,32 +9,35 @@ from dolfin import *
 mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
 
-### SIMULATION PARAMETERS ###
-dt    = 5.000         # time step
-t     = 0.            # begining time
-tf    = 200#50000.        # end time
-H_MIN = 1.            # Minimal ice thickness
-
 ### PHYSICAL CONSTANTS ###
-spy   = 31556926.     # seconds per year
-rho   = 911.          # density of ice (kg/m^3)
-rho_w = 1000.         # density of water (kg/m^3)
-g     = 9.81 * spy**2 # gravitation acceleration (m/yr^2)
-n     = 1.            # flow law exponent
-B     = 750.e3        # flow law temperature sensitivity factor (Pa*yr^.333)
-amax  = .5            # max accumlation/ablation rate
-mu    = 1.e16         # Basal traction constant
-p     = 1.            # Basal sliding exponent
-q     = 1.            # Basal sliding exponent 
-sb    = 0.            # back stress
-A     = B**-n         # 
+spy   = 31556926.             # seconds per year ............... [s]
+rho   = 911.                  # density of ice ................. [kg m^-3]
+rho_w = 1000.                 # density of water ............... [kg m^-3]
+g     = 9.81                  # gravitation acceleration ....... [m s^-2]
+n     = 3.                    # flow law exponent
+Tm    = 273.15                # tripple point of water ......... [K]
+R     = 8.314                 # gas constant ................... [J (mol K)^-1]
+c     = 1.73e3
+A     = c*exp(-13.9e4/(R*Tm)) # temp-dependent ice-flow factor.. [Pa^-n s^-1]
+B     = A**(-1/n)             # ice hardeness .................. [Pa s^(1/n)]
+amax  = .5 / spy              # max accumlation/ablation rate .. [m s^-1]
+mu    = 1e16                  # Basal traction constant
+p     = 1.                    # Basal sliding exponent
+q     = 1.                    # Basal sliding exponent 
+sb    = 0.                    # back stress
+
+### SIMULATION PARAMETERS ###
+dt    = 5.000 * spy           # time step ...................... [s]
+t     = 0.                    # begining time .................. [s]
+tf    = 10000. * spy          # end time ....................... [s]
+H_MIN = 1.                    # Minimal ice thickness .......... [m]
 
 ### DOMAIN DESCRIPTION ###
-xl    = 0.            # left edge (divide)
-xr    = 1500.e3       # right edge (margin/terminus)
-H0    = 100.          # thickness at divide
-a     = 1#4/3.
-L     = (xr - xl)/a   # length of domain
+xl    = 0.                    # left edge (divide) ............. [m]
+xr    = 1500e3                # right edge (margin/terminus) ... [m]
+Hd    = 100.                  # thickness at divide ............ [m]
+a     = 4/3.
+L     = (xr - xl)/a           # length of domain ............... [m]
 ela   = 3/4. * L / 1000
 
 # Unit interval mesh
@@ -61,7 +64,7 @@ bcs  = [H_bc, u_bc]
 
 # Neumann conditions :
 code = 'A * pow(rho*g/4 *(H - rho_w/rho * pow(D, 2) /H - sb/(rho*g)), n)'
-gn   = Expression(code, A=A, rho=rho, g=g, H=H0, rho_w=rho_w, D=0, sb=sb, n=n)
+gn   = Expression(code, A=A, rho=rho, g=g, H=Hd, rho_w=rho_w, D=0, sb=sb, n=n)
 
 boundary_markers = FacetFunction("uint", mesh)
 
@@ -75,14 +78,14 @@ Gamma_N.mark(boundary_markers, 4)
 # INTIAL CONDITIONS:
 # surface :
 # This equilibrium profile comes from vanderVeen p. 126, eq 5.50
-p0   = 'H0 / pow(n-1,n/(2*n+2)) * pow(( (n+1) * x[0] / L'+\
+p0   = 'H / pow(n-1,n/(2*n+2)) * pow(( (n+1) * x[0] / L'+\
        '- 1 + n * pow(( 1 - x[0]  / L ),1+1/n) '+\
        '- n *  pow( x[0]/L,1+1/n)),n/(2*n+2))'
-zs   = interpolate(Expression(p0,L=L,H0=H0,n=n),Q)
+zs   = interpolate(Expression(p0,L=L,H=Hd,n=n),Q)
 zt   = nan_to_num(zs.vector().array())
 zt[where(zt <= H_MIN)[0]] = H_MIN
 zs.vector().set_local(zt)
-zs   = interpolate(Constant(H0),Q)
+zs   = interpolate(Constant(Hd),Q)
 
 # bed :
 zb   = interpolate(Constant(0.0),Q)
@@ -114,8 +117,8 @@ phihat = phi + cellh/(2*unorm)*dot(u, phi.dx(0))
 theta = 0.5
 H_mid = theta*H + (1 - theta)*H0
 fH    = + (H-H0)/dt * phi * dx \
-        + 1/(2*W) * (2*H_mid*u*W).dx(0) * phihat * dx \
-        - adot * phihat * dx
+        + 1/(2*W) * (2*H_mid*u*W).dx(0) * phi * dx \
+        - adot * phi * dx
 
 # Create bilinear and linear forms
 aH = lhs(fH)
