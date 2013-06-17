@@ -15,12 +15,12 @@ rho   = 911.                  # density of ice ................. [kg m^-3]
 rho_w = 1000.                 # density of water ............... [kg m^-3]
 g     = 9.81                  # gravitation acceleration ....... [m s^-2]
 n     = 3.                    # flow law exponent
-Tm    = 273.15                # tripple point of water ......... [K]
+Tm    = 273.15                # triple point of water .......... [K]
 R     = 8.314                 # gas constant ................... [J (mol K)^-1]
 c     = 1.73e3
 A     = c*exp(-13.9e4/(R*Tm)) # temp-dependent ice-flow factor.. [Pa^-n s^-1]
 B     = A**(-1/n)             # ice hardeness .................. [Pa s^(1/n)]
-amax  = .5 / spy              # max accumlation/ablation rate .. [m s^-1]
+amax  = .5 / spy              # max accumlation u............... [m s^-1]
 
 ### SIMULATION PARAMETERS ###
 dt    = 50.00 * spy           # time step ...................... [s]
@@ -68,6 +68,7 @@ zb   = interpolate(Expression("D_MAX*sin(x[0]/10000)",D_MAX=D_MAX),Q)
 H_i  = project(zs-zb,Q)
 
 # accumulation :
+adot = Constant(0.3 / spy)
 adot = Expression('amax * ( .75 - x[0] / L)',L=L,amax=amax)
 
 # variational problem :
