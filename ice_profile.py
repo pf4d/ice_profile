@@ -77,7 +77,7 @@ zs   = interpolate(Expression("H0 - m * x[0]",m=1e-4, H0=H_MIN),Q)
 # bed :
 zb   = interpolate(Constant(0.0),Q)
 zb   = interpolate(Expression("D_MAX*sin(x[0]/10000)",D_MAX=D_MAX),Q)
-zb   = interpolate(Expression("- D_MAX * x[0]",D_MAX=1e-4),Q)
+zb   = interpolate(Expression("- m * x[0]", m=1e-4),Q)
 
 # thickness :
 H_i  = project(zs-zb,Q)
