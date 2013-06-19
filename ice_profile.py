@@ -71,11 +71,13 @@ gn   = Expression(code, A=A, rho_i=rho_i, rho_p=rho_p,
 
 # INTIAL CONDITIONS:
 # surface :
-zs   = interpolate(Constant(H_MIN),Q)
+zs   = interpolate(Constant(Hd),Q)
+zs   = interpolate(Expression("H0 - m * x[0]",m=1e-4, H0=H_MIN),Q)
 
 # bed :
 zb   = interpolate(Constant(0.0),Q)
-#zb   = interpolate(Expression("D_MAX*sin(x[0]/10000)",D_MAX=D_MAX),Q)
+zb   = interpolate(Expression("D_MAX*sin(x[0]/10000)",D_MAX=D_MAX),Q)
+zb   = interpolate(Expression("- D_MAX * x[0]",D_MAX=1e-4),Q)
 
 # thickness :
 H_i  = project(zs-zb,Q)
@@ -120,15 +122,15 @@ unorm  = sqrt(dot(u, u) + 1e-10)
 psihat = psi + cellh/(2*unorm)*dot(u, psi.dx(0))
 
 # Momentum balance: weak form of equation 9.65 of vanderveen
-theta = 1.0
+theta = 0.5
 u_mid = theta*u + (1 - theta)*u0
 h     = H + zb
 zero  = Constant(0.0)
-#fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-#        + mu * Bs * ((H - rho_p/rho_i * zb) * u_mid)**(1/m) * psi * dx \
-#        + gn * psi * ds \
-#        + 2. * B * H * u_mid.dx(0)**(1/n) * psi.dx(0) * dx \
-#        + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
+fu    = + rho_i * g * H * h.dx(0) * psi * dx \
+        + mu * Bs * ((H - rho_p/rho_i * zb) * u_mid)**(1/m) * psi * dx \
+        + gn * psi * ds \
+        + 2. * B * H * u_mid.dx(0)**(1/n) * psi.dx(0) * dx \
+        + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
