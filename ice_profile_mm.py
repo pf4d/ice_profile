@@ -7,6 +7,17 @@ import matplotlib.pyplot as plt
 from pylab import mpl
 from dolfin import *
 
+
+def update_length(mesh, u, dt):
+  """
+  evolve the ice length.
+  """
+  cellh = CellSize(mesh)
+  x0    = mesh.coordinates()[:,0]
+  x     = x0 + u * dt
+  mesh.coordinates()[:,0] = x
+  return x/1000
+
 mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
 
@@ -28,20 +39,23 @@ mu    = 1.0               # Basal traction constant
 sb    = 0.0               # back stress
 
 ### SIMULATION PARAMETERS ### 
-dt    = 40.000 * spy      # time step ...................... [s]
+dt    = 50.000 * spy      # time step ...................... [s]
 t     = 0.                # begining time .................. [s]
-tf    = 90000. * spy      # end time ....................... [s]
-H_MIN = 0.0               # Minimal ice thickness .......... [m]
-H_MAX = 5000.             # Maximum plot height ............ [m]
-D_MAX = 1000.             # maximum depth of bed ........... [m]
-u_MAX = 500.              # maximum velocity to plot  ...... [m/s]
+tf    = 5000. * spy       # end time ....................... [s]
+H_MIN = 25.0              # Minimal ice thickness .......... [m]
+H_MAX = 1000.             # Maximum plot height ............ [m]
+D_MAX = -100.             # maximum depth of bed ........... [m]
+u_MAX = 1000.             # maximum velocity to plot  ...... [m/s]
+u_MIN = -100.             # minimum velocity to plot  ...... [m/s]
+x_MAX = 500e3             # maximum x-distance to plot ..... [m]
+x_MIN = 0.                # minimum x-distance to plot ..... [m]
 
 ### DOMAIN DESCRIPTION ###
 xl    = 0.                # left edge (divide) ............. [m]
-xr    = 1500e3            # right edge (margin/terminus) ... [m]
+xr    = 500e3             # right edge (margin/terminus) ... [m]
 Hd    = 100.0             # thickness at divide ............ [m]
-c     = 1/3.              # percent of accumulation range .. [%]
-L     = c * (xr - xl)     # length of domain ............... [m]
+c     = 1                 # percent of accumulation range .. [%]
+L     = c*(xr - xl)       # length of domain ............... [m]
 ela   = L / 1000
 
 # unit interval mesh :
@@ -70,19 +84,23 @@ code = 'A * pow(rho_i*g/4 * (H - rho_p/rho_i*pow(D,2)/H - sb/(rho_i*g)), n)'
 gn   = Expression(code, A=A, rho_i=rho_i, rho_p=rho_p, 
                   g=g, D=0, sb=sb,  H=H_MIN, n=n)
 
+# Neumann conditions :
+code = 'pow(rho_i*g*H/(B*4) * (1 - rho_i/rho_w), n)'
+gn   = Expression(code, B=B, rho_i=rho_i, rho_w=rho_w, g=g, H=H_MIN, n=n)
+
 # INTIAL CONDITIONS:
 # surface :
 code = '729 - 2184.8  * pow(x[0] / 750000, 2) ' \
        '    + 1031.72 * pow(x[0] / 750000, 4) ' \
        '    - 151.72  * pow(x[0] / 750000, 6) '
 zs   = interpolate(Constant(H_MIN),Q)
-zs   = interpolate(Expression("H0 - m * x[0]",m=1e-4, H0=H_MIN),Q)
-zs   = interpolate(Expression("H0 + " + code, H0=H_MIN),Q)
+#zs   = interpolate(Expression("H0 - m * x[0]",m=1e-4, H0=H_MIN),Q)
+#zs   = interpolate(Expression("H0 + " + code, H0=H_MIN),Q)
 
 # bed :
 zb   = interpolate(Constant(0.0),Q)
-zb   = interpolate(Expression("- m * x[0]",m=1e-4),Q)
-zb   = interpolate(Expression(code), Q)
+#zb   = interpolate(Expression("- m * x[0]",m=1e-4),Q)
+#zb   = interpolate(Expression(code), Q)
 
 
 # thickness :
@@ -97,6 +115,7 @@ u_i  = interpolate(Constant(0.0),Q)
 #u_i.vector().set_local(genfromtxt("data/u.txt"))
 
 # accumulation :
+adot = Constant(0.3/spy)
 adot = Expression('amax * (1 - x[0] / L)',L=L,amax=amax)
 
 # variational problem :
@@ -134,6 +153,7 @@ theta = 0.5
 u_mid = theta*u + (1 - theta)*u0
 h     = H + zb
 zero  = Constant(0.0)
+one   = Constant(1.0)
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + mu * Bs * ((H - rho_p/rho_i * zb) * u_mid)**(1/m) * psi * dx \
         + zero * gn * psi * ds \
@@ -143,6 +163,7 @@ fu    = + rho_i * g * H * h.dx(0) * psi * dx \
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
         + B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
+        + gn * psi * ds \
         + beta * u_mid * psi * dx
 
 f     = fH + fu
@@ -193,15 +214,15 @@ hp,    = ax1.plot(xcrd, hplot, 'k', lw=2)
 ax1.plot(xcrd, [H_MAX] * len(xcrd), 'r+')
 ax1.set_xlabel('$x$ [km]')
 ax1.set_ylabel('$h$ [m]')
-ax1.set_ylim([-D_MAX,H_MAX])
-ax1.set_xlim([xl/1000, xr/1000])
+ax1.set_xlim([x_MIN/100, x_MAX/1000])
+ax1.set_ylim([D_MAX,     H_MAX])
 ax1.grid()
 
 up,    = ax2.plot(xcrd, uplot, clr, lw=2)
 ax2.axvline(x=ela, lw=2, color = gry)
 ax2.set_ylabel('$u$ [m/a]', color=clr)
-ax2.set_xlim([xl/1000, xr/1000])
-ax2.set_ylim([-100, u_MAX])
+ax2.set_xlim([x_MIN/1000, x_MAX/1000])
+ax2.set_ylim([u_MIN,      u_MAX])
 ax2.grid()
 for tl in ax2.get_yticklabels():
   tl.set_color(clr)
@@ -230,8 +251,12 @@ while t < tf:
 
   hplot = project(H + zb, Q).vector().array() 
 
+  #xcrd = update_length(mesh, uplot, dt)
+
   hp.set_ydata(hplot)
+  hp.set_xdata(xcrd)
   up.set_ydata(uplot * spy)
+  up.set_xdata(xcrd)
   fig_text.set_text('Time = %.0f yr' % (t/spy)) 
   plt.draw() 
 

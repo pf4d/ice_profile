@@ -28,15 +28,15 @@ t     = 0.                    # begining time .................. [s]
 tf    = 100000. * spy         # end time ....................... [s]
 H_MIN = 0.                    # Minimal ice thickness .......... [m]
 H_MAX = 5000.                 # Maximum plot height ............ [m]
-D_MAX = 100.                  # maximum depth of bed ........... [m]
+D_MAX = 1000.                 # maximum depth of bed ........... [m]
 
 ### DOMAIN DESCRIPTION ###
 xl    = 0.                    # left edge (divide) ............. [m]
 xr    = 1500e3                # right edge (margin/terminus) ... [m]
 Hd    = 100.0                 # thickness at divide ............ [m]
-a     = 2.
-L     = (xr - xl)/a           # length of domain ............... [m]
-ela   = 3/4. * L / 1000
+c     = 1/4.                  # percent of accumulation range .. [%]
+L     = c * (xr - xl)         # length of domain ............... [m]
+ela   = L / 1000
 
 # Unit interval mesh
 mesh  = IntervalMesh(500,xl,xr)
@@ -58,19 +58,24 @@ H_bc = DirichletBC(Q, H_MIN, terminus)  # thickness at terminus
 
 # INTIAL CONDITIONS:
 # surface :
+code = '729 - 2184.8  * pow(x[0] / 750000, 2) ' \
+       '    + 1031.72 * pow(x[0] / 750000, 4) ' \
+       '    - 151.72  * pow(x[0] / 750000, 6) '
 zs   = interpolate(Constant(Hd),Q)
+zs   = interpolate(Expression("H0 - m * x[0]",m=1e-4, H0=H_MIN),Q)
+zs   = interpolate(Expression("H0 + " + code, H0=H_MIN),Q)
 
 # bed :
 zb   = interpolate(Constant(0.0),Q)
-zb   = interpolate(Expression("D_MAX*sin(x[0]/10000)",D_MAX=D_MAX),Q)
-zb   = interpolate(Expression("- D_MAX * x[0]",D_MAX=1e-4),Q)
+zb   = interpolate(Expression("- m * x[0]",m=1e-4),Q)
+zb   = interpolate(Expression(code), Q)
 
 # thickness :
 H_i  = project(zs-zb,Q)
 
 # accumulation :
 adot = Constant(0.3 / spy)
-adot = Expression('amax * ( .75 - x[0] / L)',L=L,amax=amax)
+adot = Expression('amax * (1 - x[0] / L)',L=L,amax=amax)
 
 # variational problem :
 H         = Function(Q)       # solution
