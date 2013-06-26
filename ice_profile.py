@@ -143,7 +143,7 @@ fu    = + rho_i * g * H * h.dx(0) * psi * dx \
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
         + B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
-        + beta * u_mid * psi * dx
+        + beta*1e2 * u_mid * psi * dx
 
 f     = fH + fu
 df    = derivative(f, U, dU)

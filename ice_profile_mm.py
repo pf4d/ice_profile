@@ -8,14 +8,11 @@ from pylab import mpl
 from dolfin import *
 
 
-def update_length(mesh, u, dt):
+def update_length(x0, u, dt):
   """
   evolve the ice length.
   """
-  cellh = CellSize(mesh)
-  x0    = mesh.coordinates()[:,0]
-  x     = x0 + u * dt
-  mesh.coordinates()[:,0] = x
+  x     = x0 + u*dt
   return x/1000
 
 mpl.rcParams['font.family']     = 'serif'
@@ -60,8 +57,10 @@ ela   = L / 1000
 
 # unit interval mesh :
 mesh  = IntervalMesh(500,xl,xr)
+#mesh  = UnitIntervalMesh(500)
 cellh = CellSize(mesh)
-xcrd  = mesh.coordinates()/1000  # divide for units in km.
+xcrd  = mesh.coordinates()[:,0] / 1000    # divide for units in km.
+#xcrd  = mesh.coordinates()[:,0] * L/1000  # divide for units in km.
 
 # create FunctionSpace :
 Q     = FunctionSpace(mesh, "CG", 1)
@@ -69,10 +68,10 @@ MQ    = MixedFunctionSpace([Q, Q])
 
 # boundary conditions :
 def divide(x,on_boundary):
-  return on_boundary and x[0] < xl + 1e-6
+  return on_boundary and x[0] < 0 + 1e-6
 
 def terminus(x,on_boundary):
-  return on_boundary and x[0] > xr - 1e-6
+  return on_boundary and x[0] > 1 - 1e-6
 
 # Dirichlet conditions :
 H_bc = DirichletBC(MQ.sub(0), H_MIN, terminus)  # thickness at terminus
@@ -81,12 +80,13 @@ bcs  = [H_bc, u_bc]
 
 # Neumann conditions :
 code = 'A * pow(rho_i*g/4 * (H - rho_p/rho_i*pow(D,2)/H - sb/(rho_i*g)), n)'
-gn   = Expression(code, A=A, rho_i=rho_i, rho_p=rho_p, 
+q    = Expression(code, A=A, rho_i=rho_i, rho_p=rho_p, 
                   g=g, D=0, sb=sb,  H=H_MIN, n=n)
 
 # Neumann conditions :
-code = 'pow(rho_i*g*H/(B*4) * (1 - rho_i/rho_w), n)'
-gn   = Expression(code, B=B, rho_i=rho_i, rho_w=rho_w, g=g, H=H_MIN, n=n)
+code = 'A * pow(rho_i*g*H/4 * (1 - rho_i/rho_w), n)'
+q    = Expression(code, A=A, rho_i=rho_i, rho_w=rho_w, g=g, H=H_MIN, n=n)
+#q    = Expression(code, A=A, rho_i=rho_i, rho_w=rho_w, g=g, H=1e6, n=n)
 
 # INTIAL CONDITIONS:
 # surface :
@@ -141,8 +141,14 @@ phihat = phi + cellh/(2*unorm)*dot(u, phi.dx(0))
 theta = 0.5
 H_mid = theta*H + (1 - theta)*H0
 fH    = + (H-H0)/dt * phi * dx \
-        + 1/W * (H_mid*u*W).dx(0) * phihat * dx \
+        + (H_mid*u).dx(0) * phihat * dx \
         - adot * phihat * dx
+
+#Ldot  = ((H_mid*u).dx(0) - L*adot) / H_mid.dx(0)
+#fH    = + (H-H0)/dt * phi * dx \
+#        + 1/L * (H_mid*u).dx(0) * phihat * dx \
+#        - Ldot/L * H_mid.dx(0) * phihat * dx \
+#        - adot * phihat * dx
 
 # SUPG method psihat :        
 unorm  = sqrt(dot(u, u) + 1e-10)
@@ -156,15 +162,21 @@ zero  = Constant(0.0)
 one   = Constant(1.0)
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + mu * Bs * ((H - rho_p/rho_i * zb) * u_mid)**(1/m) * psi * dx \
-        + zero * gn * psi * ds \
+        + zero * q * psi * ds \
         + 2. * B * H * u_mid.dx(0)**(1/n) * psi.dx(0) * dx \
         + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
         + B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
-        + gn * psi * ds \
+        + q * psi * ds \
         + beta * u_mid * psi * dx
+
+#fu    = + rho_i * g * H * h.dx(0) * psi * dx \
+#        + 2. * B * H / L * u_mid.dx(0) * psi.dx(0) * dx \
+#        + L * B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
+#        + L * q * psi * ds \
+#        + L * beta * u_mid * psi * dx
 
 f     = fH + fu
 df    = derivative(f, U, dU)
@@ -227,7 +239,8 @@ ax2.grid()
 for tl in ax2.get_yticklabels():
   tl.set_color(clr)
 
-fig_text = plt.figtext(.80,.95,'Time = 0.0 yr')
+fig_time = plt.figtext(.80,.95,'Time = 0.0 yr')
+fig_flux = plt.figtext(.10,.95,'Flux = 0.0 m/a')
 
 plt.draw()
 
@@ -257,7 +270,9 @@ while t < tf:
   hp.set_xdata(xcrd)
   up.set_ydata(uplot * spy)
   up.set_xdata(xcrd)
-  fig_text.set_text('Time = %.0f yr' % (t/spy)) 
+  fig_time.set_text('Time = %.0f yr'  % (t/spy))
+  flux = project(q,Q).vector().array()[0] * spy
+  fig_flux.set_text('Flux = %.0f m/a' % flux)
   plt.draw() 
 
   # Copy solution from previous interval
