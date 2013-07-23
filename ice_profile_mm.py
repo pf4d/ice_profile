@@ -27,6 +27,7 @@ g     = 9.81              # gravitation acceleration ....... [m s^-2]
 n     = 3.                # flow law exponent
 m     = 3.                # bed friction exponent
 A     = 5.6e-17 / spy     # temp-dependent ice-flow factor.. [Pa^-n s^-1]
+A     = 1e-18 / spy
 Bs    = 100.              # sliding parameter .............. [Pa m^-2/3 s^1/3]
 B     = A**(-1/n)         # ice hardeness .................. [Pa s^(1/n)]
 beta  = 1e9               # basal resistance ............... [Pa s m^-1]
@@ -129,9 +130,9 @@ dH,du     = split(dU)                       # trial functions for H, u
 j         = TestFunction(MQ)                # test function in mixed space
 phi,psi   = split(j)                        # test functions for H, u
 
-U_i = project(as_vector([H_i,u_i]), MQ)     # project inital values on space
-U.vector().set_local(U_i.vector().array())  # initalize H, u in solution
-U0.vector().set_local(U_i.vector().array()) # initalize H, u in prev. sol
+U_k = project(as_vector([H_i,u_i]), MQ)     # project inital values on space
+U.vector().set_local(U_k.vector().array())  # initalize H, u in solution
+U0.vector().set_local(U_k.vector().array()) # initalize H, u in prev. sol
 
 # SUPG method phihat :        
 unorm  = sqrt(dot(u, u) + 1e-10)
@@ -155,7 +156,7 @@ unorm  = sqrt(dot(u, u) + 1e-10)
 psihat = psi + cellh/(2*unorm)*dot(u, psi.dx(0))
 
 # Momentum balance: weak form of equation 9.65 of vanderveen
-theta = 0.5
+theta = 0.5 
 u_mid = theta*u + (1 - theta)*u0
 h     = H + zb
 zero  = Constant(0.0)
@@ -167,10 +168,14 @@ fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-        + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
-        + B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
-        + q * psi * ds \
-        + beta * u_mid * psi * dx
+        + 2. * B * H * u_mid.dx(0)**(1/n) * psi.dx(0) * dx \
+        + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx \
+        + beta * sqrt(one) * u_mid * psi * dx
+
+#fu    = + rho_i * g * H * h.dx(0) * psi * dx \
+#        + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
+#        + B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
+#        + beta * sqrt(one) * u_mid * psi * dx
 
 #fu    = + rho_i * g * H * h.dx(0) * psi * dx \
 #        + 2. * B * H / L * u_mid.dx(0) * psi.dx(0) * dx \
@@ -191,7 +196,7 @@ prm['newton_solver']['relative_tolerance']   = 1E-7
 prm['newton_solver']['maximum_iterations']   = 100
 prm['newton_solver']['relaxation_parameter'] = 0.8
 
-solver.solve()
+#solver.solve()
 
 # Plot solution
 gry = '0.4'
@@ -243,24 +248,48 @@ fig_time = plt.figtext(.80,.95,'Time = 0.0 yr')
 fig_flux = plt.figtext(.10,.95,'Flux = 0.0 m/a')
 
 plt.draw()
+bcs = homogenize(bcs)
 
 # Time-stepping
 while t < tf:
-  # Solve the nonlinear system 
-  solver.solve()
+  omega   = 0.8
+  a_tol   = 1E-8
+  r_tol   = 1E-7
+  maxiter = 100
+  eps     = 1.0
+  nIter   = 0
+  while eps > r_tol and nIter < maxiter:
+    nIter += 1
+    A, b = assemble_system(df, -f, bcs)
+    solve(A, U_k.vector(), b)
+    eps  = U_k.vector().norm('l2')
+    
+    a    = assemble(f)
+    for bc in bcs:
+      bc.apply(a)
+    fnorm = b.norm('l2')
+   
+    U.vector()[:] += omega*U_k.vector()    # New u vector
 
-  # Plot solution
-  Hplot  = project(H, Q).vector().array()
-  Hplot[where(Hplot < H_MIN)[0]] = H_MIN
+    Hplot = project(H, Q).vector().array()
+    uplot = project(u, Q).vector().array()
+    
+    Hplot[Hplot < H_MIN] = H_MIN
+    uplot[uplot < 0.0]   = 0.0
+    
+    # update the dolfin vectors :
+    H_i.vector().set_local(Hplot)
+    u_i.vector().set_local(uplot)
+    U_new = project(as_vector([H_i, u_i]), MQ)
+    U.vector().set_local(U_new.vector().array())
 
-  uplot = project(u, Q).vector().array()
-  #uplot[where(uplot < 0.0)[0]] = 0.0
+    print '      {0:2d}  {1:3.2E}  {2:5e}'.format(nIter, eps, fnorm)
+
   
-  # update the dolfin vectors :
-  H_i.vector().set_local(Hplot)
-  u_i.vector().set_local(uplot)
-  U_new = project(as_vector([H_i, u]), MQ)
-  U.vector().set_local(U_new.vector().array())
+  ## Solve the nonlinear system 
+  #solver.solve()
+
+  ## Plot solution
 
   hplot = project(H + zb, Q).vector().array() 
 
