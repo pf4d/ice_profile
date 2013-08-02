@@ -8,12 +8,14 @@ from pylab import mpl
 from dolfin import *
 
 
-def update_length(x0, u, dt):
+def update_length(mesh, u, dt):
   """
   evolve the ice length.
   """
+  x0    = mesh.coordinates()[:,0]
   x     = x0 + u*dt
-  return x/1000
+  mesh.coordinates()[:,0] = x
+  return x / 1000
 
 mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
@@ -57,11 +59,9 @@ L     = c*(xr - xl)       # length of domain ............... [m]
 ela   = L / 1000
 
 # unit interval mesh :
-mesh  = IntervalMesh(500,xl,xr)
-#mesh  = UnitIntervalMesh(500)
+mesh  = IntervalMesh(100,xl,xr)
 cellh = CellSize(mesh)
-xcrd  = mesh.coordinates()[:,0] / 1000    # divide for units in km.
-#xcrd  = mesh.coordinates()[:,0] * L/1000  # divide for units in km.
+xcrd  = mesh.coordinates()[:,0] / 1000      # divide for units in km.
 
 # create FunctionSpace :
 Q     = FunctionSpace(mesh, "CG", 1)
@@ -159,29 +159,30 @@ psihat = psi + cellh/(2*unorm)*dot(u, psi.dx(0))
 theta = 0.5 
 u_mid = theta*u + (1 - theta)*u0
 h     = H + zb
-zero  = Constant(0.0)
-one   = Constant(1.0)
-fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-        + mu * Bs * ((H - rho_p/rho_i * zb) * u_mid)**(1/m) * psi * dx \
-        + zero * q * psi * ds \
-        + 2. * B * H * u_mid.dx(0)**(1/n) * psi.dx(0) * dx \
-        + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
+
+num1  = u_mid.dx(0)
+num2  = ((n+2) * u_mid)/(2*W)
+num3  = (H - rho_p/rho_i * zb) * u_mid
+
+num1  = interpolate(Constant(0.0), Q)
+num2  = interpolate(Constant(0.0), Q)
+num3  = interpolate(Constant(0.0), Q)
 
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-        + 2. * B * H * u_mid.dx(0)**(1/n) * psi.dx(0) * dx \
-        + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx \
-        + beta * sqrt(one) * u_mid * psi * dx
+        + 2. * B * H * num1 * psi.dx(0) * dx \
+        + B * H / W * num2 * psi * dx \
+        + beta * u_mid * psi * dx
 
 #fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-#        + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
-#        + B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
-#        + beta * sqrt(one) * u_mid * psi * dx
+#        + mu * Bs * num3 * psi * dx \
+#        + zero * q * psi * ds \
+#        + 2. * B * H * num1 * psi.dx(0) * dx \
+#        + B * H / W * num2 * psi * dx
 
 #fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-#        + 2. * B * H / L * u_mid.dx(0) * psi.dx(0) * dx \
-#        + L * B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
-#        + L * q * psi * ds \
-#        + L * beta * u_mid * psi * dx
+#        + 2. * B * H / L * num1 * psi.dx(0) * dx \
+#        + L * B * H / W * num2 * psi * dx \
+#        + L * beta * sqrt(one) * u_mid * psi * dx
 
 f     = fH + fu
 df    = derivative(f, U, dU)
@@ -228,7 +229,7 @@ uplot  = project(u, Q).vector().array() * spy
 zbPlot = project(zb, Q).vector().array()
 zbp,   = ax1.plot(xcrd, zbPlot, red, lw=2)
 hp,    = ax1.plot(xcrd, hplot, 'k', lw=2)
-ax1.plot(xcrd, [H_MAX] * len(xcrd), 'r+')
+elem,  = ax1.plot(xcrd, [H_MAX] * len(xcrd), 'r+')
 ax1.set_xlabel('$x$ [km]')
 ax1.set_ylabel('$h$ [m]')
 ax1.set_xlim([x_MIN/100, x_MAX/1000])
@@ -252,22 +253,28 @@ bcs = homogenize(bcs)
 
 # Time-stepping
 while t < tf:
-  omega   = 0.8
-  a_tol   = 1E-8
-  r_tol   = 1E-7
-  maxiter = 100
-  eps     = 1.0
-  nIter   = 0
-  while eps > r_tol and nIter < maxiter:
-    nIter += 1
-    A, b = assemble_system(df, -f, bcs)
+  atol, rtol = 1e-8, 1e-7                        # abs/rel tolerances
+  omega      = 0.8                               # relaxation parameter
+  bcs_u      = homogenize(bcs)                   # residual is zero on boundary
+  nIter      = 0                                 # number of iterations
+  residual   = 1                                 # residual
+  rel_res    = residual                          # initial epsilon
+  maxIter    = 100                               # max iterations
+  
+  num1_n     = Function(Q)
+  num2_n     = Function(Q)
+  num3_n     = Function(Q)
+  while residual > atol and rel_res > rtol and nIter < maxIter:
+    nIter  += 1
+    #df    = derivative(f, U, dU)
+    A, b    = assemble_system(df, -f, bcs)
     solve(A, U_k.vector(), b)
-    eps  = U_k.vector().norm('l2')
+    rel_res = U_k.vector().norm('l2')
     
-    a    = assemble(f)
-    for bc in bcs:
+    a = assemble(f)
+    for bc in bcs_u:
       bc.apply(a)
-    fnorm = b.norm('l2')
+    residual = b.norm('l2')
    
     U.vector()[:] += omega*U_k.vector()    # New u vector
 
@@ -283,7 +290,21 @@ while t < tf:
     U_new = project(as_vector([H_i, u_i]), MQ)
     U.vector().set_local(U_new.vector().array())
 
-    print '      {0:2d}  {1:3.2E}  {2:5e}'.format(nIter, eps, fnorm)
+    num1_t = project(u_mid.dx(0), Q).vector().array()
+    num2_t = project(((n+2) * u_mid)/(2*W) , Q).vector().array()
+    #num3_t = project((H - rho_p/rho_i * zb) * u_mid , Q).vector().array()
+
+    num1_t = abs(num1_t)**(1/n)
+    num2_t = abs(num2_t)**(1/n)
+    #num3_t = abs(num3_t)**(1/n)
+   
+    num1.vector().set_local(num1_t)
+    num2.vector().set_local(num2_t)
+    #num3_n.vector().set_local(num3_t)
+    
+    string = "Newton iteration %d: r (abs) = %.3e (tol = %.3e) " \
+             +"r (rel) = %.3e (tol = %.3e)"
+    print string % (nIter, residual, atol, rel_res, rtol)
 
   
   ## Solve the nonlinear system 
@@ -299,6 +320,7 @@ while t < tf:
   hp.set_xdata(xcrd)
   up.set_ydata(uplot * spy)
   up.set_xdata(xcrd)
+  elem.set_xdata(xcrd)
   fig_time.set_text('Time = %.0f yr'  % (t/spy))
   flux = project(q,Q).vector().array()[0] * spy
   fig_flux.set_text('Flux = %.0f m/a' % flux)

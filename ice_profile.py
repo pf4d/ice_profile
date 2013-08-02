@@ -140,10 +140,13 @@ fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + 2. * B * H * u_mid.dx(0)**(1/n) * psi.dx(0) * dx \
         + B * H / W * (((n+2) * u_mid)/(2*W))**(1/n) * psi * dx
 
+num1  = u_mid.dx(0)
+num2  = ((n+2) * u_mid)/(2*W)
+num3  = (H - rho_p/rho_i * zb) * u_mid
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-        + 2. * B * H * u_mid.dx(0) * psi.dx(0) * dx \
-        + B * H / W * (((n+2) * u_mid)/(2*W)) * psi * dx \
-        + beta*1e2 * u_mid * psi * dx
+        + 2. * B * H * num1 * psi.dx(0) * dx \
+        + B * H / W * num2 * psi * dx \
+        + beta * u_mid * psi * dx
 
 f     = fH + fu
 df    = derivative(f, U, dU)
@@ -211,6 +214,9 @@ fig_text = plt.figtext(.80,.95,'Time = 0.0 yr')
 plt.draw()
 
 # Time-stepping
+num1_n     = Function(Q)
+num2_n     = Function(Q)
+num3_n     = Function(Q)
 while t < tf:
   # Solve the nonlinear system 
   solver.solve()
@@ -220,7 +226,7 @@ while t < tf:
   Hplot[where(Hplot < H_MIN)[0]] = H_MIN
 
   uplot = project(u, Q).vector().array()
-  #uplot[where(uplot < 0.0)[0]] = 0.0
+  uplot[where(uplot < 0.0)[0]] = 0.0
   
   # update the dolfin vectors :
   H_i.vector().set_local(Hplot)
@@ -230,6 +236,18 @@ while t < tf:
 
   hplot = project(H + zb, Q).vector().array() 
 
+  num1_t = project(num1, Q).vector().array()
+  num2_t = project(num2, Q).vector().array()
+  #num3_t = project(num3, Q).vector().array()
+
+  num1_t = num1_t**(1/n)
+  num2_t = num2_t**(1/n)
+  #num3_t = num3_t**(1/n)
+  
+  num1_n.vector().set_local(num1_t)
+  num2_n.vector().set_local(num2_t)
+  #num3_n.vector().set_local(num3_t)
+    
   hp.set_ydata(hplot)
   up.set_ydata(uplot * spy)
   fig_text.set_text('Time = %.0f yr' % (t/spy)) 

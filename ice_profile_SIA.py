@@ -40,17 +40,16 @@ ela   = L / 1000
 
 # Unit interval mesh
 mesh  = IntervalMesh(500,xl,xr)
-cellh = CellSize(mesh)
 xcrd  = mesh.coordinates()/1000  # divide for units in km.
 
 # Create FunctionSpace
 Q     = FunctionSpace(mesh, "CG", 1)
 
 # Boundary conditions:
-def divide(x,on_boundary):
+def divide(x, on_boundary):
   return on_boundary and x[0] < xl + 1.e-6
 
-def terminus(x,on_boundary):
+def terminus(x, on_boundary):
   return on_boundary and x[0] > xr - 1.e-6
 
 # Dirichlet conditions :
@@ -86,10 +85,6 @@ phi       = TestFunction(Q)   # test function
 
 H.assign(H_i)                 # initalize H in solution
 H0.assign(H_i)                # initalize H in prev. sol
-
-# SUPG method phihat :        
-Hnorm  = sqrt(dot(H, H) + 1e-10)
-phihat = phi + cellh/(2*Hnorm)*dot(H, phi.dx(0))
 
 # Continuity equation: weak form of eqn. 9.54 of vanderveen
 theta = 0.5
