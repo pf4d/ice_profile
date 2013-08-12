@@ -21,27 +21,27 @@ mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
 
 ### PHYSICAL CONSTANTS ###
-spy   = 31556926.         # seconds per year ............... [s]
+a   = 31556926.           # seconds per year ............... [s]
 rho_i = 911.              # density of ice ................. [kg m^-3]
 rho_w = 1000.             # density of water ............... [kg m^-3]
 rho_p = 1028.             # density of sea water ........... [kg m^-3]
 g     = 9.81              # gravitation acceleration ....... [m s^-2]
 n     = 3.                # flow law exponent
 m     = 3.                # bed friction exponent
-A     = 5.6e-17 / spy     # temp-dependent ice-flow factor.. [Pa^-n s^-1]
-A     = 1e-18 / spy
+A     = 5.6e-17 / a       # temp-dependent ice-flow factor.. [Pa^-n s^-1]
+A     = 1e-18 / a
 Bs    = 100.              # sliding parameter .............. [Pa m^-2/3 s^1/3]
 B     = A**(-1/n)         # ice hardeness .................. [Pa s^(1/n)]
 beta  = 1e9               # basal resistance ............... [Pa s m^-1]
 C     = 7.624e6           # basal resistance ............... [Pa m^-1/3 s^1/3]
-amax  = .5 / spy          # max accumlation/ablation rate .. [m s^-1]
+amax  = .5 / a            # max accumlation/ablation rate .. [m s^-1]
 mu    = 1.0               # Basal traction constant
 sb    = 0.0               # back stress
 
 ### SIMULATION PARAMETERS ### 
-dt    = 50.000 * spy      # time step ...................... [s]
+dt    = 50.000 * a        # time step ...................... [s]
 t     = 0.                # begining time .................. [s]
-tf    = 5000. * spy       # end time ....................... [s]
+tf    = 5000. * a         # end time ....................... [s]
 H_MIN = 25.0              # Minimal ice thickness .......... [m]
 H_MAX = 1000.             # Maximum plot height ............ [m]
 D_MAX = -100.             # maximum depth of bed ........... [m]
@@ -69,10 +69,10 @@ MQ    = MixedFunctionSpace([Q, Q])
 
 # boundary conditions :
 def divide(x,on_boundary):
-  return on_boundary and x[0] < 0 + 1e-6
+  return on_boundary and x[0] < xl + 1e-6
 
 def terminus(x,on_boundary):
-  return on_boundary and x[0] > 1 - 1e-6
+  return on_boundary and x[0] > xr - 1e-6
 
 # Dirichlet conditions :
 H_bc = DirichletBC(MQ.sub(0), H_MIN, terminus)  # thickness at terminus
@@ -116,7 +116,7 @@ u_i  = interpolate(Constant(0.0),Q)
 #u_i.vector().set_local(genfromtxt("data/u.txt"))
 
 # accumulation :
-adot = Constant(0.3/spy)
+adot = Constant(0.3/a)
 adot = Expression('amax * (1 - x[0] / L)',L=L,amax=amax)
 
 # variational problem :
@@ -161,7 +161,7 @@ u_mid = theta*u + (1 - theta)*u0
 h     = H + zb
 
 num1  = u_mid.dx(0)
-num2  = ((n+2) * u_mid)/(2*W)
+num2  = u_mid
 num3  = (H - rho_p/rho_i * zb) * u_mid
 
 num1  = interpolate(Constant(0.0), Q)
@@ -170,7 +170,7 @@ num3  = interpolate(Constant(0.0), Q)
 
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + 2. * B * H * num1 * psi.dx(0) * dx \
-        + B * H / W * num2 * psi * dx \
+        + B * H / W * (n+2)/(2*W) * num2 * psi * dx \
         + beta * u_mid * psi * dx
 
 #fu    = + rho_i * g * H * h.dx(0) * psi * dx \
@@ -214,7 +214,7 @@ ax3 = plt.subplot(gs[1])
 ax2 = ax1.twinx()
 
 # plot the accumulation
-adotPlot = project(adot, Q).vector().array() * spy
+adotPlot = project(adot, Q).vector().array() * a
 ax3.axhline(lw=2, color = gry)
 ax3.axvline(x=ela, lw=2, color = gry)
 ax3.plot(xcrd, adotPlot, 'r', lw=2)
@@ -225,7 +225,7 @@ ax3.set_xlim([xl/1000, xr/1000])
 
 Hplot  = project(H, Q).vector().array()
 hplot  = project(H + zb, Q).vector().array()
-uplot  = project(u, Q).vector().array() * spy
+uplot  = project(u, Q).vector().array() * a
 zbPlot = project(zb, Q).vector().array()
 zbp,   = ax1.plot(xcrd, zbPlot, red, lw=2)
 hp,    = ax1.plot(xcrd, hplot, 'k', lw=2)
@@ -245,37 +245,40 @@ ax2.grid()
 for tl in ax2.get_yticklabels():
   tl.set_color(clr)
 
-fig_time = plt.figtext(.80,.95,'Time = 0.0 yr')
-fig_flux = plt.figtext(.10,.95,'Flux = 0.0 m/a')
+fig_time = plt.figtext(.80, .95, 'Time = 0.0 yr')
+fig_flux = plt.figtext(.10, .95, 'Flux = 0.0 m/a')
 
 plt.draw()
 bcs = homogenize(bcs)
 
 # Time-stepping
 while t < tf:
-  atol, rtol = 1e-8, 1e-7                        # abs/rel tolerances
-  omega      = 0.8                               # relaxation parameter
-  bcs_u      = homogenize(bcs)                   # residual is zero on boundary
-  nIter      = 0                                 # number of iterations
-  residual   = 1                                 # residual
-  rel_res    = residual                          # initial epsilon
-  maxIter    = 100                               # max iterations
+  converged  = False
+  atol, rtol = 1e-8, 1e-7              # abs/rel tolerances
+  omega      = 0.8                     # relaxation parameter
+  bcs_u      = homogenize(bcs)         # we know the essential BCs, i.e., 
+                                       #  the residual is zero
+  nIter      = 0                       # number of iterations
+  residual   = 1                       # residual
+  rel_res    = residual                # initial epsilon
+  maxIter    = 100                     # max iterations
   
   num1_n     = Function(Q)
   num2_n     = Function(Q)
   num3_n     = Function(Q)
-  while residual > atol and rel_res > rtol and nIter < maxIter:
+  while not converged and nIter < maxIter:
     nIter  += 1
-    #df    = derivative(f, U, dU)
-    A, b    = assemble_system(df, -f, bcs)
+    A, b    = assemble_system(df, -f, bcs_u)
     solve(A, U_k.vector(), b)
     rel_res = U_k.vector().norm('l2')
     
-    a = assemble(f)
+    c = assemble(f)
     for bc in bcs_u:
-      bc.apply(a)
+      bc.apply(c)
     residual = b.norm('l2')
    
+    converged = residual < atol or rel_res < rtol
+
     U.vector()[:] += omega*U_k.vector()    # New u vector
 
     Hplot = project(H, Q).vector().array()
@@ -283,24 +286,24 @@ while t < tf:
     
     Hplot[Hplot < H_MIN] = H_MIN
     uplot[uplot < 0.0]   = 0.0
+
+    num1_t = project(u_mid.dx(0), Q).vector().array()
+    num2_t = project(u_mid,       Q).vector().array()
+
+    num1_t = num1_t**(1/1)
+    num2_t = num2_t**(1/1)
+
+    num1_t[num1_t < 0] = 1E-18
+    num2_t[num2_t < 0] = 1E-18
+   
+    num1.vector().set_local(num1_t)
+    num2.vector().set_local(num2_t)
     
     # update the dolfin vectors :
     H_i.vector().set_local(Hplot)
     u_i.vector().set_local(uplot)
     U_new = project(as_vector([H_i, u_i]), MQ)
     U.vector().set_local(U_new.vector().array())
-
-    num1_t = project(u_mid.dx(0), Q).vector().array()
-    num2_t = project(((n+2) * u_mid)/(2*W) , Q).vector().array()
-    #num3_t = project((H - rho_p/rho_i * zb) * u_mid , Q).vector().array()
-
-    num1_t = abs(num1_t)**(1/n)
-    num2_t = abs(num2_t)**(1/n)
-    #num3_t = abs(num3_t)**(1/n)
-   
-    num1.vector().set_local(num1_t)
-    num2.vector().set_local(num2_t)
-    #num3_n.vector().set_local(num3_t)
     
     string = "Newton iteration %d: r (abs) = %.3e (tol = %.3e) " \
              +"r (rel) = %.3e (tol = %.3e)"
@@ -313,16 +316,17 @@ while t < tf:
   ## Plot solution
 
   hplot = project(H + zb, Q).vector().array() 
+  uplot = project(u, Q).vector().array()
 
   #xcrd = update_length(mesh, uplot, dt)
 
   hp.set_ydata(hplot)
   hp.set_xdata(xcrd)
-  up.set_ydata(uplot * spy)
+  up.set_ydata(uplot * a)
   up.set_xdata(xcrd)
   elem.set_xdata(xcrd)
-  fig_time.set_text('Time = %.0f yr'  % (t/spy))
-  flux = project(q,Q).vector().array()[0] * spy
+  fig_time.set_text('Time = %.0f yr'  % (t/a))
+  flux = project(q,Q).vector().array()[0] * a
   fig_flux.set_text('Flux = %.0f m/a' % flux)
   plt.draw() 
 
