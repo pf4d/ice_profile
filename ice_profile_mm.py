@@ -165,9 +165,10 @@ num1  = u_mid.dx(0)
 num2  = u_mid
 num3  = (H - rho_p/rho_i * zb) * u_mid
 
+n     = 1.0
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
-        + 2. * B * H * num1 * psi.dx(0) * dx \
-        + B * H / W * (n+2)/(2*W) * num2 * psi * dx \
+        + 2. * B * H * num1**(1/n) * psi.dx(0) * dx \
+        + B * H / W * ((n+2)/(2*W) * num2)**(1/n) * psi * dx \
         + beta * u_mid * psi * dx
 
 ## manual newton method :
