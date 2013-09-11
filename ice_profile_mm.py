@@ -145,6 +145,7 @@ fH    = + (H-H0)/dt * phi * dx \
         + (H_mid*u).dx(0) * phihat * dx \
         - adot * phihat * dx
 
+# moving mesh : not working, don't use :
 #Ldot  = ((H_mid*u).dx(0) - L*adot) / H_mid.dx(0)
 #fH    = + (H-H0)/dt * phi * dx \
 #        + 1/L * (H_mid*u).dx(0) * phihat * dx \
@@ -164,21 +165,23 @@ num1  = u_mid.dx(0)
 num2  = u_mid
 num3  = (H - rho_p/rho_i * zb) * u_mid
 
-num1  = interpolate(Constant(0.0), Q)
-num2  = interpolate(Constant(0.0), Q)
-num3  = interpolate(Constant(0.0), Q)
-
 fu    = + rho_i * g * H * h.dx(0) * psi * dx \
         + 2. * B * H * num1 * psi.dx(0) * dx \
         + B * H / W * (n+2)/(2*W) * num2 * psi * dx \
         + beta * u_mid * psi * dx
 
+## manual newton method :
+#num1  = interpolate(Constant(0.0), Q)
+#num2  = interpolate(Constant(0.0), Q)
+#num3  = interpolate(Constant(0.0), Q)
+#
 #fu    = + rho_i * g * H * h.dx(0) * psi * dx \
 #        + mu * Bs * num3 * psi * dx \
 #        + zero * q * psi * ds \
 #        + 2. * B * H * num1 * psi.dx(0) * dx \
 #        + B * H / W * num2 * psi * dx
 
+# moving mesh:  not working, don't use
 #fu    = + rho_i * g * H * h.dx(0) * psi * dx \
 #        + 2. * B * H / L * num1 * psi.dx(0) * dx \
 #        + L * B * H / W * num2 * psi * dx \
@@ -253,65 +256,65 @@ bcs = homogenize(bcs)
 
 # Time-stepping
 while t < tf:
-  converged  = False
-  atol, rtol = 1e-8, 1e-7              # abs/rel tolerances
-  omega      = 0.8                     # relaxation parameter
-  bcs_u      = homogenize(bcs)         # we know the essential BCs, i.e., 
+  #converged  = False
+  #atol, rtol = 1e-8, 1e-7              # abs/rel tolerances
+  #omega      = 0.8                     # relaxation parameter
+  #bcs_u      = homogenize(bcs)         # we know the essential BCs, i.e., 
                                        #  the residual is zero
-  nIter      = 0                       # number of iterations
-  residual   = 1                       # residual
-  rel_res    = residual                # initial epsilon
-  maxIter    = 100                     # max iterations
+  #nIter      = 0                       # number of iterations
+  #residual   = 1                       # residual
+  #rel_res    = residual                # initial epsilon
+  #maxIter    = 100                     # max iterations
   
-  num1_n     = Function(Q)
-  num2_n     = Function(Q)
-  num3_n     = Function(Q)
-  while not converged and nIter < maxIter:
-    nIter  += 1
-    A, b    = assemble_system(df, -f, bcs_u)
-    solve(A, U_k.vector(), b)
-    rel_res = U_k.vector().norm('l2')
-    
-    c = assemble(f)
-    for bc in bcs_u:
-      bc.apply(c)
-    residual = b.norm('l2')
-   
-    converged = residual < atol or rel_res < rtol
+  #num1_n     = Function(Q)
+  #num2_n     = Function(Q)
+  #num3_n     = Function(Q)
+  #while not converged and nIter < maxIter:
+  #  nIter  += 1
+  #  A, b    = assemble_system(df, -f, bcs_u)
+  #  solve(A, U_k.vector(), b)
+  #  rel_res = U_k.vector().norm('l2')
+  #  
+  #  c = assemble(f)
+  #  for bc in bcs_u:
+  #    bc.apply(c)
+  #  residual = b.norm('l2')
+  # 
+  #  converged = residual < atol or rel_res < rtol
 
-    U.vector()[:] += omega*U_k.vector()    # New u vector
+  #  U.vector()[:] += omega*U_k.vector()    # New u vector
 
-    Hplot = project(H, Q).vector().array()
-    uplot = project(u, Q).vector().array()
-    
-    Hplot[Hplot < H_MIN] = H_MIN
-    uplot[uplot < 0.0]   = 0.0
+  #  Hplot = project(H, Q).vector().array()
+  #  uplot = project(u, Q).vector().array()
+  #  
+  #  Hplot[Hplot < H_MIN] = H_MIN
+  #  uplot[uplot < 0.0]   = 0.0
 
-    num1_t = project(u_mid.dx(0), Q).vector().array()
-    num2_t = project(u_mid,       Q).vector().array()
+  #  num1_t = project(u_mid.dx(0), Q).vector().array()
+  #  num2_t = project(u_mid,       Q).vector().array()
 
-    num1_t = num1_t**(1/1)
-    num2_t = num2_t**(1/1)
+  #  num1_t = num1_t**(1/1)
+  #  num2_t = num2_t**(1/1)
 
-    num1_t[num1_t < 0] = 1E-18
-    num2_t[num2_t < 0] = 1E-18
-   
-    num1.vector().set_local(num1_t)
-    num2.vector().set_local(num2_t)
-    
-    # update the dolfin vectors :
-    H_i.vector().set_local(Hplot)
-    u_i.vector().set_local(uplot)
-    U_new = project(as_vector([H_i, u_i]), MQ)
-    U.vector().set_local(U_new.vector().array())
-    
-    string = "Newton iteration %d: r (abs) = %.3e (tol = %.3e) " \
-             +"r (rel) = %.3e (tol = %.3e)"
-    print string % (nIter, residual, atol, rel_res, rtol)
+  #  num1_t[num1_t < 0] = 1E-18
+  #  num2_t[num2_t < 0] = 1E-18
+  # 
+  #  num1.vector().set_local(num1_t)
+  #  num2.vector().set_local(num2_t)
+  #  
+  #  # update the dolfin vectors :
+  #  H_i.vector().set_local(Hplot)
+  #  u_i.vector().set_local(uplot)
+  #  U_new = project(as_vector([H_i, u_i]), MQ)
+  #  U.vector().set_local(U_new.vector().array())
+  #  
+  #  string = "Newton iteration %d: r (abs) = %.3e (tol = %.3e) " \
+  #           +"r (rel) = %.3e (tol = %.3e)"
+  #  print string % (nIter, residual, atol, rel_res, rtol)
 
   
   ## Solve the nonlinear system 
-  #solver.solve()
+  solver.solve()
 
   ## Plot solution
 
