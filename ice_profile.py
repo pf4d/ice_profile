@@ -7,6 +7,32 @@ import matplotlib.pyplot as plt
 from pylab import mpl
 from dolfin import *
 
+f = open('data/faezeh_profile.dat')
+header = f.readline()
+
+xdat = []
+Hdat = []
+hdat = []
+jdat = []
+bdat = []
+wdat = []
+
+for l in f.readlines():
+  lst = l.split('\t')
+  xdat.append(float(lst[0]))
+  Hdat.append(float(lst[1]))
+  hdat.append(float(lst[2]))
+  jdat.append(float(lst[3]))
+  bdat.append(float(lst[4]))
+  wdat.append(float(lst[5].rstrip('\n')))
+  
+xdat = array(xdat)
+Hdat = array(Hdat) 
+hdat = array(hdat) 
+jdat = array(jdat) 
+bdat = array(bdat) 
+wdat = array(wdat) 
+
 mpl.rcParams['font.family']     = 'serif'
 mpl.rcParams['legend.fontsize'] = 'medium'
 

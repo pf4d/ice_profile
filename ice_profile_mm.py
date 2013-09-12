@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from pylab import mpl
 from dolfin import *
 
-
 def update_length(mesh, u, dt):
   """
   evolve the ice length.
