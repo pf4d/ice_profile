@@ -129,6 +129,7 @@ fu    = + rho_i * g * H * zs.dx(0) * phi * dx \
         + 2. * B * H * u.dx(0)**(1/n) * phi.dx(0) * dx \
         + B * H / W * (((n+2) * u)/(2*W))**(1/n) * phi * dx
 
+# Momentum balance: Vieli and Payne, 2005
 num3  = (H - rho_p/rho_i * zb) * u
 n     = 1.0
 fu    = + rho_i * g * H * zs.dx(0) * phi * dx \
